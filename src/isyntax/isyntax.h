@@ -252,6 +252,17 @@ typedef struct isyntax_tile_t {
 	bool is_submitted_for_h_coeff_decompression;
 	bool is_submitted_for_loading;
 	bool is_loaded;
+
+    // Caching management.
+    // TODO(avirodov): need to rethink this, maybe an external struct that points to isyntax_tile_t.
+    bool cache_marked;
+    struct isyntax_tile_t* cache_next;
+    struct isyntax_tile_t* cache_prev;
+
+    // TODO(avirodov): hide behind compile flag. Useful for debug. Or make proper, useful for marking algorithm too.
+    int dbg_tile_scale;
+    int dbg_tile_x;
+    int dbg_tile_y;
 } isyntax_tile_t;
 
 typedef struct isyntax_level_t {
@@ -357,8 +368,9 @@ typedef struct isyntax_t {
 	i32 tile_height;
 	icoeff_t* black_dummy_coeff;
 	icoeff_t* white_dummy_coeff;
-	block_allocator_t ll_coeff_block_allocator;
-	block_allocator_t h_coeff_block_allocator;
+	block_allocator_t* ll_coeff_block_allocator;
+	block_allocator_t* h_coeff_block_allocator;
+    bool32 is_block_allocator_owned;
 	float loading_time;
 	float total_rgb_transform_time;
 	i32 data_model_major_version; // <100 (usually 5) for iSyntax format v1, >= 100 for iSyntax format v2
@@ -370,10 +382,10 @@ typedef struct isyntax_t {
 void isyntax_xml_parser_init(isyntax_xml_parser_t* parser);
 bool isyntax_hulsken_decompress(u8 *compressed, size_t compressed_size, i32 block_width, i32 block_height, i32 coefficient, i32 compressor_version, i16* out_buffer);
 void isyntax_set_work_queue(isyntax_t* isyntax, work_queue_t* work_queue);
-bool isyntax_open(isyntax_t* isyntax, const char* filename);
+bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators);
 void isyntax_destroy(isyntax_t* isyntax);
 void isyntax_idwt(icoeff_t* idwt, i32 quadrant_width, i32 quadrant_height, bool output_steps_as_png, const char* png_name);
-u32* isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y);
+u32* isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y, block_allocator_t* ll_coeff_block_allocator, bool decode_rgb);
 u32 isyntax_get_adjacent_tiles_mask(isyntax_level_t* level, i32 tile_x, i32 tile_y);
 u32 isyntax_get_adjacent_tiles_mask_only_existing(isyntax_level_t* level, i32 tile_x, i32 tile_y);
 u32 isyntax_idwt_tile_for_color_channel(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y, i32 color, icoeff_t* dest_buffer);
