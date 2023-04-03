@@ -2114,7 +2114,7 @@ bool isyntax_hulsken_decompress(u8* compressed, size_t compressed_size, i32 bloc
 	// Check that the serialized length is sane
 	if (serialized_length > 2 * coeff_buffer_size) {
 //		dump_block(compressed, compressed_size);
-		console_print_error("Error: isyntax_hulsken_decompress(): invalid codeblock, serialized_length too large (%d)\n", serialized_length);
+		console_print_error("Error: isyntax_hulsken_decompress(): invalid codeblock, serialized_length too large (%lld)\n", serialized_length);
 		ASSERT(!"serialized_length too large");
 		memset(out_buffer, 0, coeff_buffer_size);
 		release_temp_memory(&temp_memory);
@@ -2364,7 +2364,7 @@ bool isyntax_hulsken_decompress(u8* compressed, size_t compressed_size, i32 bloc
 
 	if (serialized_length != decompressed_length) {
 //		dump_block(compressed, compressed_size);
-		console_print("iSyntax: decompressed size mismatch (size=%d): expected %d observed %d\n",
+		console_print("iSyntax: decompressed size mismatch (size=%d): expected %lld observed %d\n",
 				 compressed_size, serialized_length, decompressed_length);
 		ASSERT(!"size mismatch");
 	}
@@ -2580,7 +2580,7 @@ static void isyntax_dump_block_header(isyntax_image_t* wsi_image, const char* fi
 
 		for (i32 i = 0; i < wsi_image->codeblock_count; i += 1/*21*3*/) {
 			isyntax_codeblock_t* codeblock = wsi_image->codeblocks + i;
-			fprintf(test_block_header_fp, "%d,%d,%d,%d,%d,%d,%d,%d\n",
+			fprintf(test_block_header_fp, "%d,%d,%d,%d,%d,%lld,%lld,%d\n",
 //			        codeblock->x_adjusted,
 //			        codeblock->y_adjusted,
 			        codeblock->x_coordinate - wsi_image->offset_x,

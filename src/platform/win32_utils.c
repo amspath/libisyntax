@@ -124,7 +124,7 @@ size_t win32_overlapped_read(thread_memory_t* thread_memory, HANDLE file_handle,
 	// To submit an async I/O request on Win32, we need to fill in an OVERLAPPED structure with the
 	// offset in the file where we want to do the read operation
 	LARGE_INTEGER offset_ = {.QuadPart = (i64)aligned_offset};
-	OVERLAPPED overlapped = {};
+	OVERLAPPED overlapped = {0};
 	overlapped.Offset = offset_.LowPart;
 	overlapped.OffsetHigh = (DWORD)offset_.HighPart;
 	overlapped.hEvent = thread_memory->async_io_events[0];
@@ -229,7 +229,7 @@ void file_stream_write(void* source, size_t bytes_to_write, file_stream_t file_s
 }
 
 i64 file_stream_get_filesize(file_stream_t file_stream) {
-	LARGE_INTEGER filesize = {};
+	LARGE_INTEGER filesize = {0};
 	if (!GetFileSizeEx(file_stream, &filesize)) {
 		win32_diagnostic("GetFileSizeEx");
 	}
@@ -237,8 +237,8 @@ i64 file_stream_get_filesize(file_stream_t file_stream) {
 }
 
 i64 file_stream_get_pos(file_stream_t file_stream) {
-	LARGE_INTEGER file_position = {};
-	LARGE_INTEGER distance_to_move = {};
+	LARGE_INTEGER file_position = {0};
+	LARGE_INTEGER distance_to_move = {0};
 	if (!SetFilePointerEx(file_stream, distance_to_move, &file_position, FILE_CURRENT)) {
 		win32_diagnostic("SetFilePointerEx");
 	}
@@ -246,7 +246,7 @@ i64 file_stream_get_pos(file_stream_t file_stream) {
 }
 
 bool file_stream_set_pos(file_stream_t file_stream, i64 offset) {
-	LARGE_INTEGER new_file_pointer = {};
+	LARGE_INTEGER new_file_pointer = {0};
 	new_file_pointer.QuadPart = offset;
 	if (!SetFilePointerEx(file_stream, new_file_pointer, NULL, FILE_BEGIN)) {
 		win32_diagnostic("SetFilePointerEx");
