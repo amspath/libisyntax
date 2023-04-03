@@ -37,7 +37,7 @@
 #endif
 
 work_queue_t create_work_queue(const char* semaphore_name, i32 entry_count) {
-	work_queue_t queue = {};
+	work_queue_t queue = {0};
 
 	i32 semaphore_initial_count = 0;
 #if WINDOWS
