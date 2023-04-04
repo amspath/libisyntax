@@ -96,26 +96,27 @@ typedef struct {
 	arena_t temp_arena;
 } thread_memory_t;
 
+// TODO(avirodov): unhack
+typedef void* window_handle_t;
+//#if WINDOWS
+//typedef HWND window_handle_t;
+//#elif APPLE
+//typedef SDL_Window* window_handle_t;
+//#else
+//typedef SDL_Window* window_handle_t;
+//#endif
 
-#if WINDOWS
-typedef HWND window_handle_t;
-#elif APPLE
-typedef SDL_Window* window_handle_t;
-#else
-typedef SDL_Window* window_handle_t;
-#endif
-
-typedef struct {
-	void* dest;
-	file_handle_t file;
-	i64 offset;
-	size_t size_to_read;
-#if WINDOWS
-	OVERLAPPED overlapped;
-#elif (APPLE || LINUX)
-	struct aiocb cb;
-#endif
-} io_operation_t;
+//typedef struct {
+//	void* dest;
+//	file_handle_t file;
+//	i64 offset;
+//	size_t size_to_read;
+//#if WINDOWS
+//	OVERLAPPED overlapped;
+//#elif (APPLE || LINUX)
+//	struct aiocb cb;
+//#endif
+//} io_operation_t;
 
 
 typedef enum open_file_dialog_action_enum {
