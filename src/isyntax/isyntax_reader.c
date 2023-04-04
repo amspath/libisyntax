@@ -38,7 +38,7 @@ static void tile_list_init(isyntax_tile_list_t* list, const char* dbg_name) {
     list->dbg_name = dbg_name;
 }
 
-static void tile_list_remove(isyntax_tile_list_t* list, isyntax_tile_t* tile) {
+void tile_list_remove(isyntax_tile_list_t* list, isyntax_tile_t* tile) {
     if (!tile->cache_next && !tile->cache_prev && !(list->head == tile) && !(list->tail == tile)) {
         // Not part of any list.
         return;

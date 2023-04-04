@@ -25,3 +25,5 @@ typedef struct isyntax_cache_t {
 isyntax_cache_t* isyntax_make_cache(const char* dbg_name, int cache_size, int block_width, int block_height);
 void isyntax_destroy_and_free_cache(isyntax_cache_t* cache);
 uint32_t* isyntax_read_tile_bgra(isyntax_cache_t* cache, isyntax_t* isyntax, int scale, int tile_x, int tile_y);
+
+void tile_list_remove(isyntax_tile_list_t* list, isyntax_tile_t* tile);
