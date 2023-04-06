@@ -1779,8 +1779,10 @@ u32* isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 
 	isyntax_level_t* level = wsi->levels + scale;
 	ASSERT(tile_x >= 0 && tile_x < level->width_in_tiles);
 	ASSERT(tile_y >= 0 && tile_y < level->height_in_tiles);
+	isyntax_tile_t* tile = level->tiles + tile_y * level->width_in_tiles + tile_x;
 	i32 block_width = isyntax->block_width;
 	i32 block_height = isyntax->block_height;
+	size_t block_size = block_width * block_height * sizeof(icoeff_t);
 	i32 first_valid_pixel = ISYNTAX_IDWT_FIRST_VALID_PIXEL;
 	i32 idwt_width = 2 * (block_width + ISYNTAX_IDWT_PAD_L + ISYNTAX_IDWT_PAD_R);
 	i32 idwt_height = 2 * (block_height + ISYNTAX_IDWT_PAD_L + ISYNTAX_IDWT_PAD_R);
@@ -3131,11 +3133,11 @@ void isyntax_destroy(isyntax_t* isyntax) {
 			}
 		}
 	}
-	if (isyntax->ll_coeff_block_allocator.is_valid) {
-		block_allocator_destroy(&isyntax->ll_coeff_block_allocator);
+	if (isyntax->ll_coeff_block_allocator->is_valid) {
+		block_allocator_destroy(isyntax->ll_coeff_block_allocator);
 	}
-	if (isyntax->h_coeff_block_allocator.is_valid) {
-		block_allocator_destroy(&isyntax->h_coeff_block_allocator);
+	if (isyntax->h_coeff_block_allocator->is_valid) {
+		block_allocator_destroy(isyntax->h_coeff_block_allocator);
 	}
 	if (isyntax->black_dummy_coeff) {
 		free(isyntax->black_dummy_coeff);
