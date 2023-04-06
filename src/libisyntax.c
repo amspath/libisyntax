@@ -35,6 +35,9 @@
 #include "platform.h"
 #include "intrinsics.h"
 
+#include "libisyntax.h"
+#include "isyntax.h"
+#include "isyntax_reader.h"
 
 platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
 
@@ -162,7 +165,138 @@ static void init_thread_pool() {
 #endif
 
 
-void libisyntax_init() {
+isyntax_error_t libisyntax_init() {
 	get_system_info(false);
 	init_thread_pool();
+    return LIBISYNTAX_OK;
 }
+
+isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax) {
+    // Note(avirodov): intentionally not changing api of isyntax_open. We can do that later if needed and reduce
+    // the size/count of wrappers.
+    isyntax_t* result = malloc(sizeof(isyntax_t));
+    memset(result, 0, sizeof(*result));
+
+    bool success = isyntax_open(result, filename, is_init_allocators);
+    if (success) {
+        *out_isyntax = result;
+        return LIBISYNTAX_OK;
+    } else {
+        free(result);
+        return LIBISYNTAX_FATAL;
+    }
+}
+
+void libisyntax_close(isyntax_t* isyntax) {
+    isyntax_destroy(isyntax);
+    free(isyntax);
+}
+
+int32_t libisyntax_get_tile_width(const isyntax_t* isyntax) {
+    return isyntax->tile_width;
+}
+
+int32_t libisyntax_get_tile_height(const isyntax_t* isyntax) {
+    return isyntax->tile_height;
+}
+
+int32_t libisyntax_get_wsi_image_index(const isyntax_t* isyntax) {
+    return isyntax->wsi_image_index;
+}
+
+const isyntax_image_t* libisyntax_get_image(const isyntax_t* isyntax, int32_t wsi_image_index) {
+    return &isyntax->images[wsi_image_index];
+}
+
+int32_t libisyntax_image_get_level_count(const isyntax_image_t* image) {
+    return image->level_count;
+}
+
+const isyntax_level_t* libisyntax_image_get_level(const isyntax_image_t* image, int32_t index) {
+    return &image->levels[index];
+}
+
+int32_t libisyntax_level_get_scale(const isyntax_level_t* level) {
+    return level->scale;
+}
+
+int32_t libisyntax_level_get_width_in_tiles(const isyntax_level_t* level) {
+    return level->width_in_tiles;
+}
+
+int32_t libisyntax_level_get_height_in_tiles(const isyntax_level_t* level) {
+    return level->height_in_tiles;
+}
+
+isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t cache_size,
+                                        isyntax_cache_t** out_isyntax_cache)
+{
+    isyntax_cache_t* cache_ptr = malloc(sizeof(isyntax_cache_t));
+    memset(cache_ptr, 0, sizeof(*cache_ptr));
+    tile_list_init(&cache_ptr->cache_list, debug_name_or_null);
+    cache_ptr->target_cache_size = cache_size;
+    cache_ptr->mutex = benaphore_create();
+
+    // Note: rest of initialization is deferred to the first injection, as that is where we will know the block size.
+
+    *out_isyntax_cache = cache_ptr;
+    return LIBISYNTAX_OK;
+}
+
+isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax) {
+    // TODO(avirodov): consider refactoring implementation to another file, here and in destroy.
+    if (isyntax->ll_coeff_block_allocator != NULL || isyntax->h_coeff_block_allocator != NULL) {
+        return LIBISYNTAX_INVALID_ARGUMENT;
+    }
+
+    if (!isyntax_cache->h_coeff_block_allocator.is_valid || !isyntax_cache->ll_coeff_block_allocator.is_valid) {
+        // Shouldn't ever partially initialize.
+        assert(!isyntax_cache->h_coeff_block_allocator.is_valid);
+        assert(!isyntax_cache->ll_coeff_block_allocator.is_valid);
+
+        isyntax_cache->allocator_block_width = isyntax->block_width;
+        isyntax_cache->allocator_block_height = isyntax->block_height;
+        size_t ll_coeff_block_size = isyntax->block_width * isyntax->block_height * sizeof(icoeff_t);
+        size_t block_allocator_maximum_capacity_in_blocks = GIGABYTES(32) / ll_coeff_block_size;
+        size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
+        size_t h_coeff_block_size = ll_coeff_block_size * 3;
+        size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
+        isyntax_cache->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+        isyntax_cache->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+    }
+
+    if (isyntax_cache->allocator_block_width != isyntax->block_width ||
+            isyntax_cache->allocator_block_height != isyntax->block_height) {
+        return LIBISYNTAX_FATAL; // Not implemented, see todo in libisyntax.h.
+    }
+
+    isyntax->ll_coeff_block_allocator = &isyntax_cache->ll_coeff_block_allocator;
+    isyntax->h_coeff_block_allocator = &isyntax_cache->h_coeff_block_allocator;
+    isyntax->is_block_allocator_owned = false;
+    return LIBISYNTAX_OK;
+}
+
+void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
+    if (isyntax_cache->ll_coeff_block_allocator.is_valid) {
+        block_allocator_destroy(&isyntax_cache->ll_coeff_block_allocator);
+    }
+    if (isyntax_cache->h_coeff_block_allocator.is_valid) {
+        block_allocator_destroy(&isyntax_cache->h_coeff_block_allocator);
+    }
+    benaphore_destroy(&isyntax_cache->mutex);
+    free(isyntax_cache);
+}
+
+isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
+                                     int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels) {
+    // TODO(avirodov): if isyntax_cache is null, we can support using allocators that are in isyntax object,
+    //  if is_init_allocators = 1 when created. Not sure is needed.
+    *out_pixels = isyntax_read_tile_bgra(isyntax, isyntax_cache, level, tile_x, tile_y);
+    return LIBISYNTAX_OK;
+}
+
+void libisyntax_tile_free_pixels(uint32_t* pixels) {
+    free(pixels);
+}
+
+

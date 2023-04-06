@@ -31,7 +31,7 @@
 #define LOG(msg, ...) console_print(msg, ##__VA_ARGS__)
 #define LOG_VAR(fmt, var) console_print("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
-static void tile_list_init(isyntax_tile_list_t* list, const char* dbg_name) {
+void tile_list_init(isyntax_tile_list_t* list, const char* dbg_name) {
     list->head = NULL;
     list->tail = NULL;
     list->count = 0;
@@ -318,10 +318,10 @@ static void isyntax_make_tile_lists_by_scale(isyntax_t* isyntax, int start_scale
     }
 }
 
-uint32_t* isyntax_read_tile_bgra(isyntax_cache_t* cache, isyntax_t* isyntax, int scale, int tile_x, int tile_y) {
+uint32_t* isyntax_read_tile_bgra(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, int tile_x, int tile_y) {
     // TODO(avirodov): more granular locking (some notes below). This will require handling overlapping work, that is
     //  thread A needing tile 123 and started to load it, and thread B needing same tile 123 and needs to wait for A.
-    // TODO(avirodov): g_autoptr(GMutexLocker) locker G_GNUC_UNUSED = g_mutex_locker_new(&cache->mutex);
+    benaphore_lock(&cache->mutex);
 
     isyntax_image_t* wsi = &isyntax->images[isyntax->wsi_image_index];
     isyntax_level_t* level = &wsi->levels[scale];
@@ -330,6 +330,7 @@ uint32_t* isyntax_read_tile_bgra(isyntax_cache_t* cache, isyntax_t* isyntax, int
     if (!tile->exists) {
         uint32_t* rgba = malloc(isyntax->tile_width * isyntax->tile_height * 4);
         memset(rgba, 0xff, isyntax->tile_width * isyntax->tile_height * 4);
+        benaphore_unlock(&cache->mutex);
         return rgba;
     }
 
@@ -407,33 +408,6 @@ uint32_t* isyntax_read_tile_bgra(isyntax_cache_t* cache, isyntax_t* isyntax, int
         tile->has_h = false;
     }
 
+    benaphore_unlock(&cache->mutex);
     return result;
-}
-
-isyntax_cache_t* isyntax_make_cache(const char* dbg_name, int cache_size, int block_width, int block_height) {
-    isyntax_cache_t* cache_ptr = malloc(sizeof(isyntax_cache_t));
-    tile_list_init(&cache_ptr->cache_list, dbg_name);
-    cache_ptr->target_cache_size = cache_size;
-    // TODO(avirodov): g_mutex_init(&cache_ptr->mutex);
-
-    cache_ptr->allocator_block_width = block_width;
-    cache_ptr->allocator_block_height = block_height;
-    size_t ll_coeff_block_size = block_width * block_height * sizeof(icoeff_t);
-    size_t block_allocator_maximum_capacity_in_blocks = GIGABYTES(32) / ll_coeff_block_size;
-    size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
-    size_t h_coeff_block_size = ll_coeff_block_size * 3;
-    size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
-    cache_ptr->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-    cache_ptr->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-    return cache_ptr;
-}
-
-void isyntax_destroy_and_free_cache(isyntax_cache_t* cache) {
-    if (cache->ll_coeff_block_allocator.is_valid) {
-        block_allocator_destroy(&cache->ll_coeff_block_allocator);
-    }
-    if (cache->h_coeff_block_allocator.is_valid) {
-        block_allocator_destroy(&cache->h_coeff_block_allocator);
-    }
-    free(cache);
 }

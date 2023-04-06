@@ -1,11 +1,11 @@
-#include "common.h"
-#include "isyntax/isyntax_reader.h"
+#include "libisyntax.h"
+
+#include <stdint.h>
+#include <assert.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "third_party/stb_image_write.h"
+#include "third_party/stb_image_write.h"  // for png export
 
-// TODO(avirodov): libisyntax_init()? not sure who has to call the per-thread init, need discussion.
-#include "platform/platform.h"  // for get_system_info(..), init_thread_memory(..)
 
 
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
@@ -15,16 +15,16 @@ uint32_t bgra_to_rgba(uint32_t val) {
 }
 
 void print_isyntax_levels(isyntax_t* isyntax) {
-    int wsi_image_idx = isyntax->wsi_image_index;
+    int wsi_image_idx = libisyntax_get_wsi_image_index(isyntax);
     LOG_VAR("%d", wsi_image_idx);
-    isyntax_image_t* wsi_image = &isyntax->images[wsi_image_idx];
-    isyntax_level_t* levels = wsi_image->levels;
+    const isyntax_image_t* wsi_image = libisyntax_get_image(isyntax, wsi_image_idx);
 
-    for (int i = 0; i < wsi_image->level_count; ++i) {
+    for (int i = 0; i < libisyntax_image_get_level_count(wsi_image); ++i) {
+        const isyntax_level_t* level = libisyntax_image_get_level(wsi_image, i);
         LOG_VAR("%d", i);
-        LOG_VAR("%d", levels[i].scale);
-        LOG_VAR("%d", levels[i].width_in_tiles);
-        LOG_VAR("%d", levels[i].height_in_tiles);
+        LOG_VAR("%d", libisyntax_level_get_scale(level));
+        LOG_VAR("%d", libisyntax_level_get_width_in_tiles(level));
+        LOG_VAR("%d", libisyntax_level_get_height_in_tiles(level));
     }
 }
 
@@ -39,18 +39,17 @@ int main(int argc, char** argv) {
 
 	char* filename = argv[1];
 
-    get_system_info(/*verbose=*/true);
-    init_thread_memory(0);
+    libisyntax_init();
 
-	isyntax_t isyntax = {0};
-	if (!isyntax_open(&isyntax, filename, /*init_allocators=*/false)) {
+	isyntax_t* isyntax;
+	if (libisyntax_open(filename, /*is_init_allocators=*/0, &isyntax) != LIBISYNTAX_OK) {
         printf("Failed to open %s\n", filename);
         return -1;
     }
     printf("Successfully opened %s\n", filename);
 
     if (argc <= 5) {
-        print_isyntax_levels(&isyntax);
+        print_isyntax_levels(isyntax);
     } else {
         int level = atoi(argv[2]);
         int tile_x = atoi(argv[3]);
@@ -62,28 +61,30 @@ int main(int argc, char** argv) {
         LOG_VAR("%d", tile_y);
         LOG_VAR("%s", output_png);
 
-        isyntax_cache_t *isyntax_cache = isyntax_make_cache("example_cache", 2000,
-                                                            isyntax.block_width, isyntax.block_height);
-        // Allocators must be null because we asked to not init_allocators in isyntax_open().
-        assert(isyntax.h_coeff_block_allocator == NULL);
-        assert(isyntax.ll_coeff_block_allocator == NULL);
-        isyntax.ll_coeff_block_allocator = &isyntax_cache->ll_coeff_block_allocator;
-        isyntax.h_coeff_block_allocator = &isyntax_cache->h_coeff_block_allocator;
-        isyntax.is_block_allocator_owned = false;
+        int32_t tile_width = libisyntax_get_tile_width(isyntax);
+        int32_t tile_height = libisyntax_get_tile_height(isyntax);
+        LOG_VAR("%d", tile_width);
+        LOG_VAR("%d", tile_height);
 
-        uint32_t *pixels = isyntax_read_tile_bgra(isyntax_cache, &isyntax, level, tile_x, tile_y);
+        isyntax_cache_t *isyntax_cache = NULL;
+        assert(libisyntax_cache_create("example cache", 2000, &isyntax_cache) == LIBISYNTAX_OK);
+        assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
+
+        uint32_t *pixels = NULL;
+        assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
 
         // convert data to the correct pixel format (bgra->rgba).
-        for (int i = 0; i < isyntax.tile_height * isyntax.tile_width; ++i) {
+        for (int i = 0; i < tile_height * tile_width; ++i) {
             pixels[i] = bgra_to_rgba(pixels[i]);
         }
         printf("Writing %s...\n", output_png);
-        stbi_write_png(output_png, isyntax.tile_width, isyntax.tile_height, 4, pixels, isyntax.tile_width * 4);
+        stbi_write_png(output_png, tile_width, tile_height, 4, pixels, tile_width * 4);
         printf("Done writing %s.\n", output_png);
 
-        isyntax_destroy_and_free_cache(isyntax_cache);
+        libisyntax_tile_free_pixels(pixels);
+        libisyntax_cache_destroy(isyntax_cache);
     }
 
-    isyntax_destroy(&isyntax);
+    libisyntax_close(isyntax);
 	return 0;
 }
