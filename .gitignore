@@ -1,0 +1,13 @@
+cmake-build*/
+.idea/
+release/
+build/
+*.exe
+*.dll
+*.app/*
+*.desktop
+*.ini
+*.isyntax
+*.png
+*.json
+*.xml
