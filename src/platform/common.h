@@ -211,7 +211,9 @@ FORCE_INLINE void libc_free(void* memory) {
 #endif
 
 // NOTE: need to define STB_SPRINTF_IMPLEMENTATION in one source file
-#include <stb_sprintf.h>
+#ifndef STB_SPRINTF_H_INCLUDE
+#include "stb_sprintf.h"
+#endif
 #undef sprintf
 #undef snprintf
 #undef vsprintf

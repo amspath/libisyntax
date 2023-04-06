@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.24)
 project(libisyntax)
 
 set(CMAKE_C_STANDARD 17)
-set(CMAKE_CXX_STANDARD 20)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -17,20 +16,7 @@ include_directories("${CMAKE_SOURCE_DIR}/src/utils")
 include_directories("${CMAKE_SOURCE_DIR}/src/isyntax")
 include_directories("${CMAKE_SOURCE_DIR}/src/third_party")
 
-# https://stackoverflow.com/questions/13103018/how-to-prepend-cmake-current-source-dir-to-all-files-in-variable
-function(prepend_path SOURCE_FILES PREFIX)
-    foreach(SOURCE_FILE ${${SOURCE_FILES}})
-        set(MODIFIED ${MODIFIED} ${PREFIX}/${SOURCE_FILE})
-    endforeach()
-    set(${SOURCE_FILES} ${MODIFIED} PARENT_SCOPE)
-endfunction()
-
-
-
-
-
-
-add_library(libisyntax
+set(LIBISYNTAX_COMMON_SOURCE_FILES
         src/libisyntax.c
         src/isyntax/isyntax.c
         src/isyntax/isyntax_reader.c
@@ -41,25 +27,22 @@ add_library(libisyntax
         src/platform/work_queue.c
         src/third_party/yxml.c
         src/third_party/ltalloc.cc
-        )
+)
+
+if (WIN32)
+    set(LIBISYNTAX_COMMON_SOURCE_FILES ${LIBISYNTAX_COMMON_SOURCE_FILES} src/platform/win32_utils.c)
+else()
+    set(LIBISYNTAX_COMMON_SOURCE_FILES ${LIBISYNTAX_COMMON_SOURCE_FILES} src/platform/linux_utils.c)
+endif()
+
+add_library(libisyntax
+        ${LIBISYNTAX_COMMON_SOURCE_FILES}
+)
 
 add_executable(isyntax_example
         src/isyntax_example.c
-        src/libisyntax.c
-        src/isyntax/isyntax.c
-        src/isyntax/isyntax_reader.c
-        src/utils/timerutils.c
-        src/utils/block_allocator.c
-        src/utils/benaphore.c
-        src/platform/platform.c
-        src/platform/work_queue.c
-        src/third_party/yxml.c
-        src/third_party/ltalloc.cc
-        )
-
-if (WIN32)
-    target_sources(isyntax_example PRIVATE src/platform/win32_utils.c)
-endif()
+        ${LIBISYNTAX_COMMON_SOURCE_FILES}
+)
 
 if (WIN32)
     target_link_libraries(libisyntax winmm)

@@ -25,12 +25,15 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "common.h"
-#include "platform.h"
-#include "intrinsics.h"
+#define STB_SPRINTF_IMPLEMENTATION
+#include "stb_sprintf.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#include "common.h"
+#include "platform.h"
+#include "intrinsics.h"
 
 
 platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
@@ -98,6 +101,7 @@ static void init_thread_pool() {
 
 #else
 
+#include <pthread.h>
 
 static void* worker_thread(void* parameter) {
     platform_thread_info_t* thread_info = (platform_thread_info_t*) parameter;
@@ -137,7 +141,6 @@ static void init_thread_pool() {
 
 	global_work_queue = create_work_queue("/worksem", 1024); // Queue for newly submitted tasks
 	global_completion_queue = create_work_queue("/completionsem", 1024); // Message queue for completed tasks
-	global_export_completion_queue = create_work_queue("/exportcompletionsem", 1024); // Message queue for export task
 
     pthread_t threads[MAX_THREAD_COUNT] = {};
 
