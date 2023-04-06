@@ -3133,12 +3133,14 @@ void isyntax_destroy(isyntax_t* isyntax) {
 			}
 		}
 	}
-	if (isyntax->ll_coeff_block_allocator->is_valid) {
-		block_allocator_destroy(isyntax->ll_coeff_block_allocator);
-	}
-	if (isyntax->h_coeff_block_allocator->is_valid) {
-		block_allocator_destroy(isyntax->h_coeff_block_allocator);
-	}
+    if (isyntax->is_block_allocator_owned) {
+        if (isyntax->ll_coeff_block_allocator->is_valid) {
+            block_allocator_destroy(isyntax->ll_coeff_block_allocator);
+        }
+        if (isyntax->h_coeff_block_allocator->is_valid) {
+            block_allocator_destroy(isyntax->h_coeff_block_allocator);
+        }
+    }
 	if (isyntax->black_dummy_coeff) {
 		free(isyntax->black_dummy_coeff);
 		isyntax->black_dummy_coeff = NULL;
