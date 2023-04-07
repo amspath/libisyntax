@@ -3100,9 +3100,9 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 				for (int tile_y = 0; tile_y < level->height_in_tiles; ++tile_y) {
 					for (int tile_x = 0; tile_x < level->width_in_tiles; ++tile_x) {
 						isyntax_tile_t* tile = &level->tiles[level->width_in_tiles * tile_y + tile_x];
-						tile->dbg_tile_scale = scale;
-						tile->dbg_tile_x = tile_x;
-						tile->dbg_tile_y = tile_y;
+						tile->tile_scale = scale;
+						tile->tile_x = tile_x;
+						tile->tile_y = tile_y;
 					}
 				}
 			}

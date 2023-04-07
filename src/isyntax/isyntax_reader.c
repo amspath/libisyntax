@@ -62,7 +62,7 @@ void tile_list_remove(isyntax_tile_list_t* list, isyntax_tile_t* tile) {
 }
 
 static void tile_list_insert_first(isyntax_tile_list_t* list, isyntax_tile_t* tile) {
-    // printf("### tile_list_insert_first %s scale=%d x=%d y=%d\n", list->dbg_name, tile->dbg_tile_scale, tile->dbg_tile_x, tile->dbg_tile_y);
+    // printf("### tile_list_insert_first %s scale=%d x=%d y=%d\n", list->dbg_name, tile->tile_scale, tile->tile_x, tile->tile_y);
     ASSERT(tile->cache_next == NULL && tile->cache_prev == NULL);
     if (list->head == NULL) {
         list->head = tile;
@@ -110,7 +110,7 @@ static void isyntax_openslide_load_tile_coefficients_ll_or_h(isyntax_cache_t* ca
         ASSERT(codeblock->coefficient == (is_ll ? 0 : 1)); // LL coefficient codeblock for this tile.
         // TODO(avirodov): int vs i32 vs u32 consistently.
         ASSERT(codeblock->color_component == (u32)color);
-        ASSERT(codeblock->scale == (u32)tile->dbg_tile_scale);
+        ASSERT(codeblock->scale == (u32)tile->tile_scale);
         if (is_ll) {
             tile->color_channels[color].coeff_ll = (icoeff_t *) block_alloc(&cache->ll_coeff_block_allocator);
         } else {
@@ -148,7 +148,7 @@ static void isyntax_openslide_load_tile_coefficients(isyntax_cache_t* cache, isy
 
     // Load LL codeblocks here only for top-level tiles. For other levels, the LL coefficients are computed from parent
     // tiles later on.
-    if (!tile->has_ll && tile->dbg_tile_scale == wsi->max_scale) {
+    if (!tile->has_ll && tile->tile_scale == wsi->max_scale) {
         isyntax_openslide_load_tile_coefficients_ll_or_h(
                 cache, isyntax, tile, /*codeblock_index=*/tile->codeblock_index, /*is_ll=*/true);
     }
@@ -157,15 +157,15 @@ static void isyntax_openslide_load_tile_coefficients(isyntax_cache_t* cache, isy
         ASSERT(tile->exists);
         isyntax_data_chunk_t* chunk = wsi->data_chunks + tile->data_chunk_index;
 
-        i32 scale_in_chunk = chunk->scale - tile->dbg_tile_scale;
+        i32 scale_in_chunk = chunk->scale - tile->tile_scale;
         ASSERT(scale_in_chunk >= 0 && scale_in_chunk < 3);
         i32 codeblock_index_in_chunk = 0;
         if (scale_in_chunk == 0) {
             codeblock_index_in_chunk = 0;
         } else if (scale_in_chunk == 1) {
-            codeblock_index_in_chunk = 1 + (tile->dbg_tile_y % 2) * 2 + (tile->dbg_tile_x % 2);
+            codeblock_index_in_chunk = 1 + (tile->tile_y % 2) * 2 + (tile->tile_x % 2);
         } else if (scale_in_chunk == 2) {
-            codeblock_index_in_chunk = 5 + (tile->dbg_tile_y % 4) * 4 + (tile->dbg_tile_x % 4);
+            codeblock_index_in_chunk = 5 + (tile->tile_y % 4) * 4 + (tile->tile_x % 4);
         } else {
             panic();
         }
@@ -189,9 +189,9 @@ typedef union isyntax_tile_children_t {
 static isyntax_tile_children_t isyntax_openslide_compute_children(isyntax_t* isyntax, isyntax_tile_t* tile) {
     isyntax_tile_children_t result;
     isyntax_image_t* wsi = &isyntax->images[isyntax->wsi_image_index];
-    ASSERT(tile->dbg_tile_scale > 0);
-    isyntax_level_t *next_level = &wsi->levels[tile->dbg_tile_scale - 1];
-    result.child_top_left = next_level->tiles + (tile->dbg_tile_y * 2) * next_level->width_in_tiles + (tile->dbg_tile_x * 2);
+    ASSERT(tile->tile_scale > 0);
+    isyntax_level_t *next_level = &wsi->levels[tile->tile_scale - 1];
+    result.child_top_left = next_level->tiles + (tile->tile_y * 2) * next_level->width_in_tiles + (tile->tile_x * 2);
     result.child_top_right = result.child_top_left + 1;
     result.child_bottom_left = result.child_top_left + next_level->width_in_tiles;
     result.child_bottom_right = result.child_bottom_left + 1;
@@ -201,10 +201,10 @@ static isyntax_tile_children_t isyntax_openslide_compute_children(isyntax_t* isy
 
 static uint32_t* isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isyntax, isyntax_tile_t* tile,
                                         bool return_rgb) {
-    if (tile->dbg_tile_scale == 0) {
+    if (tile->tile_scale == 0) {
         ASSERT(return_rgb); // Shouldn't be asking for idwt at level 0 if we're not going to use the result for pixels.
         return isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
-                                 tile->dbg_tile_scale, tile->dbg_tile_x, tile->dbg_tile_y,
+                                 tile->tile_scale, tile->tile_x, tile->tile_y,
                                  &cache->ll_coeff_block_allocator, /*decode_rgb=*/true);
     }
 
@@ -212,12 +212,12 @@ static uint32_t* isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isynt
         // TODO(avirodov): if we want rgb from tile where idwt was done already, this could be cheaper if we store
         //  the lls in the tile. Currently need to recompute idwt.
         return isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
-                                 tile->dbg_tile_scale, tile->dbg_tile_x, tile->dbg_tile_y,
+                                 tile->tile_scale, tile->tile_x, tile->tile_y,
                                  &cache->ll_coeff_block_allocator, /*decode_rgb=*/true);
     }
 
     // If all children have ll coefficients and we don't need the rgb pixels, no need to do the idwt.
-    ASSERT(!return_rgb && tile->dbg_tile_scale > 0);
+    ASSERT(!return_rgb && tile->tile_scale > 0);
     isyntax_tile_children_t children = isyntax_openslide_compute_children(isyntax, tile);
     if (children.child_top_left->has_ll && children.child_top_right->has_ll &&
         children.child_bottom_left->has_ll && children.child_bottom_right->has_ll) {
@@ -225,7 +225,7 @@ static uint32_t* isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isynt
     }
 
     isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
-                      tile->dbg_tile_scale, tile->dbg_tile_x, tile->dbg_tile_y,
+                      tile->tile_scale, tile->tile_x, tile->tile_y,
                       &cache->ll_coeff_block_allocator, /*decode_rgb=*/false);
     return NULL;
 }
@@ -233,13 +233,13 @@ static uint32_t* isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isynt
 static void isyntax_make_tile_lists_add_parent_to_list(isyntax_t* isyntax, isyntax_tile_t* tile,
                                                        isyntax_tile_list_t* idwt_list, isyntax_tile_list_t* cache_list) {
     isyntax_image_t* wsi = &isyntax->images[isyntax->wsi_image_index];
-    int parent_tile_scale = tile->dbg_tile_scale + 1;
+    int parent_tile_scale = tile->tile_scale + 1;
     if (parent_tile_scale > wsi->max_scale) {
         return;
     }
 
-    int parent_tile_x = tile->dbg_tile_x / 2;
-    int parent_tile_y = tile->dbg_tile_y / 2;
+    int parent_tile_x = tile->tile_x / 2;
+    int parent_tile_y = tile->tile_y / 2;
     isyntax_level_t* parent_level = &wsi->levels[parent_tile_scale];
     isyntax_tile_t* parent_tile = &parent_level->tiles[parent_level->width_in_tiles * parent_tile_y + parent_tile_x];
     if (parent_tile->exists && !parent_tile->cache_marked) {
@@ -251,7 +251,7 @@ static void isyntax_make_tile_lists_add_parent_to_list(isyntax_t* isyntax, isynt
 
 static void isyntax_make_tile_lists_add_children_to_list(isyntax_t* isyntax, isyntax_tile_t* tile,
                                                          isyntax_tile_list_t* children_list, isyntax_tile_list_t* cache_list) {
-    if (tile->dbg_tile_scale > 0) {
+    if (tile->tile_scale > 0) {
         isyntax_tile_children_t children = isyntax_openslide_compute_children(isyntax, tile);
         for (int i = 0; i < 4; ++i) {
             if (!children.as_array[i]->cache_marked) {
@@ -272,11 +272,11 @@ static void isyntax_make_tile_lists_by_scale(isyntax_t* isyntax, int start_scale
         // Mark all neighbors of idwt tiles at this level as requiring coefficients.
         isyntax_level_t* level = &wsi->levels[scale];
         for (ITERATE_TILE_LIST(tile, (*idwt_list))) {
-            if (tile->dbg_tile_scale == scale) {
+            if (tile->tile_scale == scale) {
                 for (int y_offset = -1; y_offset <= 1; ++y_offset) {
                     for (int x_offset = -1; x_offset <= 1; ++ x_offset) {
-                        int neighbor_tile_x =  tile->dbg_tile_x + x_offset;
-                        int neighbor_tile_y = tile->dbg_tile_y + y_offset;
+                        int neighbor_tile_x =  tile->tile_x + x_offset;
+                        int neighbor_tile_y = tile->tile_y + y_offset;
                         if (neighbor_tile_x < 0 || neighbor_tile_x >= level->width_in_tiles ||
                             neighbor_tile_y < 0 || neighbor_tile_y >= level->height_in_tiles) {
                             continue;
@@ -298,12 +298,12 @@ static void isyntax_make_tile_lists_by_scale(isyntax_t* isyntax, int start_scale
         // Mark all parents of tiles at this level as requiring idwt. This way all tiles at this level will get their
         // ll coefficients.
         for (ITERATE_TILE_LIST(tile, (*idwt_list))) {
-            if (tile->dbg_tile_scale == scale) {
+            if (tile->tile_scale == scale) {
                 isyntax_make_tile_lists_add_parent_to_list(isyntax, tile, idwt_list, cache_list);
             }
         }
         for (ITERATE_TILE_LIST(tile, (*coeff_list))) {
-            if (tile->dbg_tile_scale == scale) {
+            if (tile->tile_scale == scale) {
                 isyntax_make_tile_lists_add_parent_to_list(isyntax, tile, idwt_list, cache_list);
             }
         }
@@ -355,9 +355,9 @@ uint32_t* isyntax_read_tile_bgra(isyntax_t* isyntax, isyntax_cache_t* cache, int
     isyntax_make_tile_lists_by_scale(isyntax, scale, &idwt_list, &coeff_list, &children_list, &cache->cache_list);
 
     // Unmark visit status and reserve all nodes. todo(avirodov): reserve later when doing threading.
-    for (ITERATE_TILE_LIST(tile, idwt_list))     { tile->cache_marked = false; /*printf("@@@ idwt_list tile scale=%d x=%d y=%d\n", tile->dbg_tile_scale, tile->dbg_tile_x, tile->dbg_tile_y);*/ }
-    for (ITERATE_TILE_LIST(tile, coeff_list))    { tile->cache_marked = false; /*printf("@@@ coeff_list tile scale=%d x=%d y=%d\n", tile->dbg_tile_scale, tile->dbg_tile_x, tile->dbg_tile_y);*/ }
-    for (ITERATE_TILE_LIST(tile, children_list)) { tile->cache_marked = false; /*printf("@@@ children_list tile scale=%d x=%d y=%d\n", tile->dbg_tile_scale, tile->dbg_tile_x, tile->dbg_tile_y);*/ }
+    for (ITERATE_TILE_LIST(tile, idwt_list))     { tile->cache_marked = false; /*printf("@@@ idwt_list tile scale=%d x=%d y=%d\n", tile->tile_scale, tile->tile_x, tile->tile_y);*/ }
+    for (ITERATE_TILE_LIST(tile, coeff_list))    { tile->cache_marked = false; /*printf("@@@ coeff_list tile scale=%d x=%d y=%d\n", tile->tile_scale, tile->tile_x, tile->tile_y);*/ }
+    for (ITERATE_TILE_LIST(tile, children_list)) { tile->cache_marked = false; /*printf("@@@ children_list tile scale=%d x=%d y=%d\n", tile->tile_scale, tile->tile_x, tile->tile_y);*/ }
 
     // IO+decode: For all dependent tiles, read and decode coefficients where missing (hh, and ll for top tiles).
     // Assuming lists are sorted parents first.

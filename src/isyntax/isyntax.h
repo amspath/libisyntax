@@ -253,16 +253,22 @@ typedef struct isyntax_tile_t {
 	bool is_submitted_for_loading;
 	bool is_loaded;
 
-    // Caching management.
-    // TODO(avirodov): need to rethink this, maybe an external struct that points to isyntax_tile_t.
+    // Cache management.
+    // TODO(avirodov): need to rethink this, maybe an external struct that points to isyntax_tile_t. The benefit
+    //   is that the cache is usually smaller than the number of tiles. The con is that I'll need to manage list memory
+    //   (probably another allocator for small objects - list nodes).
     bool cache_marked;
     struct isyntax_tile_t* cache_next;
     struct isyntax_tile_t* cache_prev;
 
-    // TODO(avirodov): hide behind compile flag. Useful for debug. Or make proper, useful for marking algorithm too.
-    int dbg_tile_scale;
-    int dbg_tile_x;
-    int dbg_tile_y;
+    // Note(avirodov): this is needed for isyntax_reader. It is very convenient to be able to compute neighbors
+    // from the tile itself, although at the cost of additional memory (3 ints) per tile.
+    // TODO(avirodov): reconsider this as part of moving out cache_* fields, if applicable.
+    // TODO(avirodov): tile_x and tile_y can be computed by O(1) pointer arithmetic given scale. Scale can be
+    //  computed as well, but in O(L) where L is number of levels, and that will be computed often.
+    int tile_scale;
+    int tile_x;
+    int tile_y;
 } isyntax_tile_t;
 
 typedef struct isyntax_level_t {
