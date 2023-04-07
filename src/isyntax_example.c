@@ -30,19 +30,19 @@ void print_isyntax_levels(isyntax_t* isyntax) {
 
 int main(int argc, char** argv) {
 
-	if (argc <= 1) {
+    if (argc <= 1) {
         printf("Usage: %s <isyntax_file> - show levels & tiles.\n"
                "       %s <isyntax_file> <level> <tile_x> <tile_y> <output.png> - write a tile to output.png",
                argv[0], argv[0]);
-		return 0;
-	}
+        return 0;
+    }
 
-	char* filename = argv[1];
+    char* filename = argv[1];
 
     libisyntax_init();
 
-	isyntax_t* isyntax;
-	if (libisyntax_open(filename, /*is_init_allocators=*/0, &isyntax) != LIBISYNTAX_OK) {
+    isyntax_t* isyntax;
+    if (libisyntax_open(filename, /*is_init_allocators=*/0, &isyntax) != LIBISYNTAX_OK) {
         printf("Failed to open %s\n", filename);
         return -1;
     }
@@ -86,5 +86,5 @@ int main(int argc, char** argv) {
     }
 
     libisyntax_close(isyntax);
-	return 0;
+    return 0;
 }
