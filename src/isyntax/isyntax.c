@@ -1246,6 +1246,18 @@ static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
 			data[i] = signed_magnitude_to_twos_complement_16(data[i]);
 		}
 	}
+#elif defined(__ARM_NEON)
+    // NEON version for ARM processors
+    u32 i;
+    for (i = 0; i < len; i += 8) {
+        uint16x8_t x = vld1q_u16(data + i);
+        int16x8_t sign_masks = vshrq_n_s16((int16x8_t)x, 15);
+        uint16x8_t maybe_positive = vbicq_u16(x, (uint16x8_t)sign_masks);
+        uint16x8_t value_if_negative = vsubq_u16(vandq_u16(x, vdupq_n_u16(0x8000)), x);
+        uint16x8_t maybe_negative = vandq_u16((uint16x8_t)sign_masks, value_if_negative);
+        uint16x8_t result = vorrq_u16(maybe_positive, maybe_negative);
+        vst1q_u16(data + i, result);
+    }
 #else
 	// Slow version
     i32 i = 0;

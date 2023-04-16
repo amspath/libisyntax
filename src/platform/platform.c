@@ -104,7 +104,7 @@ void get_system_info(bool verbose) {
 	sysctlbyname("hw.logicalcpu", &logical_cpu_count, &logical_cpu_count_len, NULL, 0);
 	os_page_size = (u32) getpagesize();
 	page_alignment_mask = ~((u64)(sysconf(_SC_PAGE_SIZE) - 1));
-	is_macos = true;
+	bool is_macos = true;
 #elif LINUX
     logical_cpu_count = sysconf( _SC_NPROCESSORS_ONLN );
     physical_cpu_count = logical_cpu_count; // TODO: how to read this on Linux?
