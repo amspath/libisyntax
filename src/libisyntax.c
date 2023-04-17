@@ -39,7 +39,7 @@
 #include "isyntax.h"
 #include "isyntax_reader.h"
 
-platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
+static platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
 
 
 
@@ -54,7 +54,7 @@ _Noreturn DWORD WINAPI thread_proc(void* parameter) {
 
 	atomic_increment(&global_worker_thread_idle_count);
 
-	init_thread_memory(thread_info->logical_thread_index);
+	init_thread_memory(thread_info->logical_thread_index, &global_system_info);
 	thread_memory_t* thread_memory = local_thread_memory;
 
 	for (i32 i = 0; i < MAX_ASYNC_IO_EVENTS; ++i) {
@@ -66,7 +66,7 @@ _Noreturn DWORD WINAPI thread_proc(void* parameter) {
 //	console_print("Thread %d reporting for duty (init took %.3f seconds)\n", thread_info->logical_thread_index, get_seconds_elapsed(init_start_time, get_clock()));
 
 	for (;;) {
-		if (thread_info->logical_thread_index > active_worker_thread_count) {
+		if (thread_info->logical_thread_index > global_active_worker_thread_count) {
 			// Worker is disabled, do nothing
 			Sleep(100);
 			continue;
@@ -80,10 +80,10 @@ _Noreturn DWORD WINAPI thread_proc(void* parameter) {
 }
 
 static void init_thread_pool() {
-	init_thread_memory(0);
+	init_thread_memory(0, &global_system_info);
 
-	worker_thread_count = total_thread_count - 1;
-	active_worker_thread_count = worker_thread_count;
+	global_worker_thread_count = total_thread_count - 1;
+	global_active_worker_thread_count = global_worker_thread_count;
 
 	global_work_queue = create_work_queue("/worksem", 1024); // Queue for newly submitted tasks
 	global_completion_queue = create_work_queue("/completionsem", 1024); // Message queue for completed tasks
@@ -111,11 +111,11 @@ static void* worker_thread(void* parameter) {
 
 //	fprintf(stderr, "Hello from thread %d\n", thread_info->logical_thread_index);
 
-    init_thread_memory(thread_info->logical_thread_index);
+    init_thread_memory(thread_info->logical_thread_index, &global_system_info);
 	atomic_increment(&global_worker_thread_idle_count);
 
 	for (;;) {
-		if (thread_info->logical_thread_index > active_worker_thread_count) {
+		if (thread_info->logical_thread_index > global_active_worker_thread_count) {
 			// Worker is disabled, do nothing
 			platform_sleep(100);
 			continue;
@@ -123,7 +123,7 @@ static void* worker_thread(void* parameter) {
         if (!is_queue_work_waiting_to_start(thread_info->queue)) {
             //platform_sleep(1);
             sem_wait(thread_info->queue->semaphore);
-            if (thread_info->logical_thread_index > active_worker_thread_count) {
+            if (thread_info->logical_thread_index > global_active_worker_thread_count) {
                 // Worker is disabled, do nothing
                 platform_sleep(100);
                 continue;
@@ -135,12 +135,10 @@ static void* worker_thread(void* parameter) {
     return 0;
 }
 
-platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
-
 static void init_thread_pool() {
-	init_thread_memory(0);
-    worker_thread_count = total_thread_count - 1;
-	active_worker_thread_count = worker_thread_count;
+	init_thread_memory(0, &global_system_info);
+    global_worker_thread_count = global_system_info.suggested_total_thread_count - 1;
+    global_active_worker_thread_count = global_worker_thread_count;
 
 	global_work_queue = create_work_queue("/worksem", 1024); // Queue for newly submitted tasks
 	global_completion_queue = create_work_queue("/completionsem", 1024); // Message queue for completed tasks
@@ -148,7 +146,7 @@ static void init_thread_pool() {
     pthread_t threads[MAX_THREAD_COUNT] = {};
 
     // NOTE: the main thread is considered thread 0.
-    for (i32 i = 1; i < total_thread_count; ++i) {
+    for (i32 i = 1; i < global_system_info.suggested_total_thread_count; ++i) {
         thread_infos[i] = (platform_thread_info_t){ .logical_thread_index = i, .queue = &global_work_queue};
 
         if (pthread_create(threads + i, NULL, &worker_thread, (void*)(&thread_infos[i])) != 0) {

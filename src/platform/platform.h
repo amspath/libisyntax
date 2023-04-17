@@ -96,6 +96,14 @@ typedef struct {
 	arena_t temp_arena;
 } thread_memory_t;
 
+typedef struct system_info_t {
+    u32 os_page_size;
+    u64 page_alignment_mask;
+    i32 physical_cpu_count;
+    i32 logical_cpu_count;
+    i32 suggested_total_thread_count;
+    bool is_macos;
+} system_info_t;
 
 
 typedef struct directory_listing_t directory_listing_t;
@@ -147,7 +155,7 @@ bool is_directory(const char* path);
 
 void get_system_info(bool verbose);
 
-void init_thread_memory(i32 logical_thread_index);
+void init_thread_memory(i32 logical_thread_index, system_info_t* system_info);
 
 // globals
 #if defined(PLATFORM_IMPL)
@@ -163,16 +171,9 @@ static inline temp_memory_t begin_temp_memory_on_local_thread() { return begin_t
 
 extern int g_argc;
 extern const char** g_argv;
-
-
-extern u32 os_page_size;
-extern u64 page_alignment_mask;
-extern i32 total_thread_count;
-extern i32 worker_thread_count;
-extern i32 active_worker_thread_count;
-extern i32 physical_cpu_count;
-extern i32 logical_cpu_count;
-
+extern system_info_t global_system_info;
+extern i32 global_worker_thread_count;
+extern i32 global_active_worker_thread_count;
 extern work_queue_t global_completion_queue;
 
 extern bool is_verbose_mode INIT(= false);
