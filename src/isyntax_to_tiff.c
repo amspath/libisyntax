@@ -73,11 +73,59 @@ typedef VipsForeignLoadClass VipsForeignLoadIsyntaxClass;
 G_DEFINE_TYPE(VipsForeignLoadIsyntax, vips_foreign_load_isyntax, VIPS_TYPE_FOREIGN_LOAD);
 
 
-static int
-isyntax_generate(VipsRegion *out, void *seq, void *a, void *b, gboolean *stop) {
-    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *) a;
-    VipsRect *r = &out->valid;
+//static int
+//isyntax_generate(VipsRegion *out, void *seq, void *a, void *b, gboolean *stop) {
+//    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *) a;
+//    VipsRect *r = &out->valid;
+//
+//    int32_t tile_width = isyntax->tile_width;
+//    int32_t tile_height = isyntax->tile_height;
+//
+//    int32_t level = 0;
+//    uint32_t *pixels = NULL;
+//
+//    // Calculate the tile range for the region
+//    int32_t tile_start_x = r->left / tile_width;
+//    int32_t tile_end_x = (r->left + r->width + tile_width - 1) / tile_width;
+//    int32_t tile_start_y = r->top / tile_height;
+//    int32_t tile_end_y = (r->top + r->height + tile_height - 1) / tile_height;
+//
+//    for (int32_t tile_y = tile_start_y; tile_y < tile_end_y; ++tile_y) {
+//        for (int32_t tile_x = tile_start_x; tile_x < tile_end_x; ++tile_x) {
+//            assert(libisyntax_tile_read(isyntax->isyntax, isyntax->isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
+//            bgra_to_rgba(pixels, tile_width, tile_height);
+//
+//            // Calculate the intersection of the region and the tile
+//            VipsRect tile_rect = {
+//                    .left = tile_x * tile_width,
+//                    .top = tile_y * tile_height,
+//                    .width = tile_width,
+//                    .height = tile_height
+//            };
+//            VipsRect intersection;
+//            vips_rect_intersectrect(r, &tile_rect, &intersection);
+//
+//            // Copy the intersection area from the tile to the output region
+//            for (int y = intersection.top; y < VIPS_RECT_BOTTOM(&intersection); y++) {
+//                uint32_t *p = (uint32_t *) VIPS_REGION_ADDR(out, intersection.left, y);
+//                uint32_t *q = pixels + (y - tile_rect.top) * tile_width + (intersection.left - tile_rect.left);
+//
+//                memcpy(p, q, intersection.width * sizeof(uint32_t));
+//            }
+//        }
+//    }
+//
+//    // Free the pixels buffer if needed
+//    if (pixels) {
+//        free(pixels);
+//        /* Free the pixels buffer */
+//    }
+//
+//    return (0);
+//}
 
+static void
+read_region(VipsForeignLoadIsyntax *isyntax, VipsRegion *out, const VipsRect *r) {
     int32_t tile_width = isyntax->tile_width;
     int32_t tile_height = isyntax->tile_height;
 
@@ -118,21 +166,35 @@ isyntax_generate(VipsRegion *out, void *seq, void *a, void *b, gboolean *stop) {
     // Free the pixels buffer if needed
     if (pixels) {
         free(pixels);
-        /* Free the pixels buffer */
     }
-
-    return (0);
 }
+
+static int
+isyntax_generate(VipsRegion *out, void *seq, void *a, void *b, gboolean *stop) {
+    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *) a;
+    VipsRect *r = &out->valid;
+
+    read_region(isyntax, out, r);
+
+    return 0;
+}
+
 
 /* Header function for VipsForeignLoadIsyntax */
 static int
 vips_foreign_load_isyntax_header(VipsForeignLoad *load) {
-    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *)load;
+    VipsForeignLoadIsyntax *isyntax_load = (VipsForeignLoadIsyntax *)load;
+    isyntax_t *isyntax = isyntax_load->isyntax;
+    isyntax_cache_t *isyntax_cache = isyntax_load->isyntax_cache;
+    const isyntax_image_t *wsi_image = isyntax_load->wsi_image;
+    const isyntax_level_t *level = isyntax_load->level;
+
 
     // Set the image properties using the appropriate libisyntax functions
-    int width = /* Call libisyntax function to get width */;
-    int height = /* Call libisyntax function to get height */;
-    int bands = /* Call libisyntax function to get bands */;
+
+    int width = libisyntax_get_(level);
+    int height = 100; // libisyntax_level_get_height(level);
+    int bands = 4; // Assuming RGBA
 
     vips_image_init_fields(load->out,
                            width,
@@ -146,6 +208,27 @@ vips_foreign_load_isyntax_header(VipsForeignLoad *load) {
     return 0;
 }
 
+/* Load function for VipsForeignLoadIsyntax */
+static int
+vips_foreign_load_isyntax_load(VipsForeignLoad *load) {
+    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *)load;
+
+    VipsImage **t = (VipsImage **)vips_object_local_array(VIPS_OBJECT(load), 1);
+    t[0] = vips_image_new();
+
+    // Call isyntax_generate function
+    if (vips_image_generate(t[0],
+                            NULL, isyntax_generate, NULL,
+                            isyntax, NULL)) {
+        return -1;
+    }
+
+    if (vips_image_write(t[0], load->real)) {
+        return -1;
+    }
+
+    return 0;
+}
 
 /* Class init function for VipsForeignLoadIsyntax */
 static void
@@ -158,7 +241,7 @@ vips_foreign_load_isyntax_class_init(VipsForeignLoadIsyntaxClass *klass) {
     gobject_class->get_property = vips_object_get_property;
 
     object_class->nickname = "isyntaxload";
-    object_class->description = _("Load an isyntax image");
+    object_class->description = "Load an isyntax image";
 
     /* Add your properties here using vips_object_class_install_property() */
 
@@ -169,19 +252,25 @@ vips_foreign_load_isyntax_class_init(VipsForeignLoadIsyntaxClass *klass) {
 /* Register the VipsForeignLoadIsyntax class with libvips */
 static void
 vips_foreign_load_isyntax_register(void) {
-    static GOnce once = G_ONCE_INIT;
+    static gboolean registered = FALSE;
+    static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
 
-    if (g_once_init_enter(&once)) {
-        GType type = g_type_register_static_simple(
-                VIPS_TYPE_FOREIGN_LOAD,
-                g_intern_static_string("VipsForeignLoadIsyntax"),
-                sizeof(VipsForeignLoadIsyntaxClass),
-                (GClassInitFunc)vips_foreign_load_isyntax_class_init,
-                sizeof(VipsForeignLoadIsyntax),
-                (GInstanceInitFunc)vips_foreign_load_isyntax_init,
-                0);
+    if (!registered) {
+        g_static_mutex_lock(&mutex);
 
-        g_once_init_leave(&once, type);
+        if (!registered) {
+            GType type = g_type_register_static_simple(
+                    VIPS_TYPE_FOREIGN_LOAD,
+                    g_intern_static_string("VipsForeignLoadIsyntax"),
+                    sizeof(VipsForeignLoadIsyntaxClass),
+                    (GClassInitFunc)vips_foreign_load_isyntax_class_init,
+                    sizeof(VipsForeignLoadIsyntax),
+                    (GInstanceInitFunc)vips_foreign_load_isyntax_init,
+                    0);
+            registered = TRUE;
+        }
+
+        g_static_mutex_unlock(&mutex);
     }
 }
 
@@ -196,6 +285,8 @@ vips_foreign_load_isyntax_init(VipsForeignLoadIsyntax *isyntax) {
 
 
 int main(int argc, char** argv) {
+    vips_foreign_load_isyntax_register();
+
     if (VIPS_INIT(argv[0])) {
         vips_error_exit("Failed to initialize vips");
     }
@@ -232,35 +323,6 @@ int main(int argc, char** argv) {
     // TODO: The actual width is smaller! Get this from the library.
 
     uint32_t *pixels = NULL;
-
-    int32_t total_tiles = num_tiles_width * num_tiles_height;
-    int32_t processed_tiles = 0;
-    int prev_progress = -1; // Initialize to an invalid value
-
-    for (int32_t tile_y = 0; tile_y < num_tiles_height; ++tile_y) {
-        for (int32_t tile_x = 0; tile_x < num_tiles_width; ++tile_x) {
-            assert(libisyntax_tile_read(isyntax, isyntax_cache, 0, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
-            bgra_to_rgba(pixels, tile_height, tile_width);
-            // Do something with the tile.
-
-            // Update the progress counter
-            processed_tiles++;
-
-            // Calculate the current progress as a percentage
-            int current_progress = (int)((float)processed_tiles / total_tiles * 100.0);
-
-            // Print the progress to the console only when it changes
-            if (current_progress != prev_progress) {
-                printf("Progress: %d%%\r", current_progress);
-                fflush(stdout); // Flush the output buffer to ensure it gets printed immediately
-
-                // Update the previous progress value
-                prev_progress = current_progress;
-            }
-        }
-    }
-
-
 
 
     libisyntax_tile_free_pixels(pixels);
