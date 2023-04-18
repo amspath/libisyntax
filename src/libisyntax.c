@@ -296,6 +296,12 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
 isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
+    // Compute the offset
+    // TODO: Is this always in [0]?
+    v2f offset = isyntax->images[0].levels[level].origin_offset;
+    x += (int64_t) (offset.x * isyntax->mpp_x);
+    y += (int64_t) (offset.y * isyntax->mpp_y);
+
     // Calculate tile coordinates
     int32_t tile_width = libisyntax_get_tile_width(isyntax);
     int32_t tile_height = libisyntax_get_tile_height(isyntax);
