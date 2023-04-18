@@ -319,17 +319,19 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
             // Calculate the portion of the tile to be copied
             int64_t src_x = (tile_x == start_tile_x) ? x % tile_width : 0;
             int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
-            int64_t dest_x = (tile_x - start_tile_x) * tile_width - ((tile_x == start_tile_x) ? x % tile_width : 0);
-            int64_t dest_y = (tile_y - start_tile_y) * tile_height - ((tile_y == start_tile_y) ? y % tile_height : 0);
-            int64_t copy_width = (tile_x == end_tile_x) ? ((x + width) % tile_width) ?: tile_width : tile_width - src_x;
-            int64_t copy_height = (tile_y == end_tile_y) ? ((y + height) % tile_height) ?: tile_height : tile_height - src_y;
+            int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - (x % tile_width);
+            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height - (y % tile_height);
+            int64_t copy_width = (tile_x == end_tile_x) ? (x + width) % tile_width : tile_width - src_x;
+            int64_t copy_height = (tile_y == end_tile_y) ? (y + height) % tile_height : tile_height - src_y;
 
             // Copy the relevant portion of the tile to the region
             for (int64_t i = 0; i < copy_height; ++i) {
-                memcpy((*out_pixels) + (dest_y * width) + dest_x + (i * width),
-                       pixels + (src_y * tile_width) + src_x + (i * tile_width),
+                memcpy((*out_pixels) + (dest_y + i) * width + dest_x,
+                       pixels + (src_y + i) * tile_width + src_x,
                        copy_width * sizeof(uint32_t));
             }
+
+
 
             // Free the tile data
             free(pixels);
