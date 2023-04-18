@@ -303,13 +303,13 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     y += (int64_t) (offset.y * isyntax->mpp_y);
 
     // Calculate tile coordinates
-    int32_t tile_width = libisyntax_get_tile_width(isyntax);
-    int32_t tile_height = libisyntax_get_tile_height(isyntax);
+    int32_t tile_width = isyntax->tile_width;
+    int32_t tile_height = isyntax->tile_height;
 
-    int32_t start_tile_x = x / tile_width;
-    int32_t end_tile_x = (x + width - 1) / tile_width;
-    int32_t start_tile_y = y / tile_height;
-    int32_t end_tile_y = (y + height - 1) / tile_height;
+    int64_t start_tile_x = x / tile_width;
+    int64_t end_tile_x = (x + width - 1) / tile_width;
+    int64_t start_tile_y = y / tile_height;
+    int64_t end_tile_y = (y + height - 1) / tile_height;
 
     // Allocate memory for region
     *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
