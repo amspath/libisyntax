@@ -6,13 +6,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "third_party/stb_image_write.h"  // for png export
 
-
-
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
-
-uint32_t bgra_to_rgba(uint32_t val) {
-    return ((val & 0xff) << 16) | (val & 0x00ff00) | ((val & 0xff0000) >> 16) | (val & 0xff000000);
-}
 
 void print_isyntax_levels(isyntax_t* isyntax) {
     int wsi_image_idx = libisyntax_get_wsi_image_index(isyntax);
@@ -74,9 +68,8 @@ int main(int argc, char** argv) {
         assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
 
         // convert data to the correct pixel format (bgra->rgba).
-        for (int i = 0; i < tile_height * tile_width; ++i) {
-            pixels[i] = bgra_to_rgba(pixels[i]);
-        }
+        bgra_to_rgba(pixels);
+
         printf("Writing %s...\n", output_png);
         stbi_write_png(output_png, tile_width, tile_height, 4, pixels, tile_width * 4);
         printf("Done writing %s.\n", output_png);

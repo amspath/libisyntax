@@ -57,9 +57,11 @@ isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t 
 isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax);
 void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 
+//== Helpers ===
+void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height);
 
 //== Tile API ==
-// Note: pixels are in BGRA layout.
+// Note: pixels are in BGRA layout. Use bgra_to_rgba to convert.
 // Note: must use libisyntax_tile_free_pixels() to free out_pixels.
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
                                      int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels);
