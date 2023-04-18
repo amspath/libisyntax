@@ -6,13 +6,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "third_party/stb_image_write.h"  // for png export
 
-
-
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
-
-//uint32_t bgra_to_rgba(uint32_t val) {
-//    return ((val & 0xff) << 16) | (val & 0x00ff00) | ((val & 0xff0000) >> 16) | (val & 0xff000000);
-//}
 
 #include <stdint.h>
 #if defined(__ARM_NEON)
@@ -57,7 +51,6 @@ void bgra_to_rgba(uint32_t* pixels, int tile_width, int tile_height) {
     }
 #endif
 }
-
 
 void print_isyntax_levels(isyntax_t* isyntax) {
     int wsi_image_idx = libisyntax_get_wsi_image_index(isyntax);
