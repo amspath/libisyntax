@@ -20,9 +20,10 @@
 
 void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height) {
     int num_pixels = tile_width * tile_height;
+    int num_pixels_aligned = (num_pixels / 4) * 4;
 
 #if defined(__ARM_NEON)
-    for (int i = 0; i < num_pixels; i += 4) {
+    for (int i = 0; i < num_pixels_aligned; i += 4) {
         uint32x4_t bgra = vld1q_u32(pixels + i);
         uint32x4_t b_mask = vdupq_n_u32(0x000000FF);
         uint32x4_t r_mask = vdupq_n_u32(0x00FF0000);
@@ -35,7 +36,7 @@ void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height) {
         vst1q_u32(pixels + i, rgba);
     }
 #elif defined(__SSE2__)
-    for (int i = 0; i < num_pixels; i += 4) {
+    for (int i = 0; i < num_pixels_aligned; i += 4) {
         __m128i bgra = _mm_loadu_si128((__m128i*)(pixels + i));
         __m128i b_mask = _mm_set1_epi32(0x000000FF);
         __m128i r_mask = _mm_set1_epi32(0x00FF0000);
@@ -48,7 +49,7 @@ void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height) {
         _mm_storeu_si128((__m128i*)(pixels + i), rgba);
     }
 #else
-    for (int i = 0; i < num_pixels; ++i) {
+    for (int i = num_pixels_aligned; i < num_pixels; ++i) {
         uint32_t val = pixels[i];
         pixels[i] = ((val & 0xff) << 16) | (val & 0x00ff00) | ((val & 0xff0000) >> 16) | (val & 0xff000000);
     }
@@ -58,7 +59,7 @@ void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height) {
 int main(int argc, char **argv) {
 
     if (argc <= 7) {
-        printf("Usage: %s <isyntax_file> <level> <tile_x> <tile_y> <width> <height> <output.png> - write a tile to output.png",
+        printf("Usage: %s <isyntax_file> <level> <x_coord> <y_coord> <width> <height> <output.png> - write a tile to output.png",
                argv[0], argv[0]);
         return 0;
     }
@@ -76,15 +77,15 @@ int main(int argc, char **argv) {
 
 
     int32_t level = atoi(argv[2]);
-    int32_t tile_x = atoi(argv[3]);
-    int32_t tile_y = atoi(argv[4]);
+    int32_t x_coord = atoi(argv[3]);
+    int32_t y_coord = atoi(argv[4]);
     int32_t region_width = atoi(argv[5]);
     int32_t region_height = atoi(argv[6]);
     const char *output_png = argv[7];
 
     LOG_VAR("%d", level);
-    LOG_VAR("%d", tile_x);
-    LOG_VAR("%d", tile_y);
+    LOG_VAR("%d", x_coord);
+    LOG_VAR("%d", y_coord);
     LOG_VAR("%d", region_width);
     LOG_VAR("%d", region_height);
     LOG_VAR("%s", output_png);
@@ -98,9 +99,8 @@ int main(int argc, char **argv) {
     assert(libisyntax_cache_create("example cache", 2000, &isyntax_cache) == LIBISYNTAX_OK);
     assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
 
-
     uint32_t *pixels = NULL;
-    assert(libisyntax_read_region(isyntax, isyntax_cache, 8, 0, 0, region_width, region_height, &pixels) ==
+    assert(libisyntax_read_region(isyntax, isyntax_cache, level, x_coord, y_coord, region_width, region_height, &pixels) ==
            LIBISYNTAX_OK);
     // convert data to the correct pixel format (bgra->rgba).
 
