@@ -1229,10 +1229,10 @@ static inline i32 twos_complement_to_signed_magnitude(u32 x) {
 }
 
 static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
+    u32 i = 0;
 #if defined(__SSE2__)
-	// Fast SIMD version
-	i32 i;
-	for (i = 0; i < len; i += 8) {
+	// Fast x86 SIMD version
+	for (; i < len; i += 8) {
 		__m128i x = _mm_loadu_si128((__m128i*)(data + i));
 		__m128i sign_masks = _mm_srai_epi16(x, 15); // 0x0000 if positive, 0xFFFF if negative
 		__m128i maybe_positive = _mm_andnot_si128(sign_masks, x); // (~m & x)
@@ -1241,28 +1241,32 @@ static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
 		__m128i result = _mm_or_si128(maybe_positive, maybe_negative);
 		_mm_storeu_si128((__m128i*)(data + i), result);
 	}
-	if (i < len) {
-		for (; i < len; ++i) {
-			data[i] = signed_magnitude_to_twos_complement_16(data[i]);
-		}
-	}
-#else
-	// Slow version
-    i32 i = 0;
+#elif defined(__ARM_NEON)
+    // NEON version for ARM processors
+    for (; i < len; i += 8) {
+        uint16x8_t x = vld1q_u16(data + i);
+        int16x8_t sign_masks = vshrq_n_s16((int16x8_t)x, 15);
+        uint16x8_t maybe_positive = vbicq_u16(x, (uint16x8_t)sign_masks);
+        uint16x8_t value_if_negative = vsubq_u16(vandq_u16(x, vdupq_n_u16(0x8000)), x);
+        uint16x8_t maybe_negative = vandq_u16((uint16x8_t)sign_masks, value_if_negative);
+        uint16x8_t result = vorrq_u16(maybe_positive, maybe_negative);
+        vst1q_u16(data + i, result);
+    }
+#endif
+    // Slow version, for last 0-7 elements or in case SIMD isn't available
 	for (; i < len; ++i) {
 		data[i] = signed_magnitude_to_twos_complement_16(data[i]);
 	}
-#endif
 	ASSERT(i == len);
 }
 
 // Convert a block of 16-bit signed integers to their absolute value
 // Almost the same as the signed magnitude <-> twos complement conversion, except the sign bit is cleared at the end
-static void convert_to_absolute_value_16_block(i16* data, u32 len) {
+static void signed_magnitude_to_absolute_value_16_block(i16* data, u32 len) {
+    u32 i = 0;
 #if defined(__SSE2__)
-	// Fast SIMD version
-	i32 i;
-	for (i = 0; i < len; i += 8) {
+	// Fast x86 SIMD version
+	for (; i < len; i += 8) {
 		__m128i x = _mm_loadu_si128((__m128i*)(data + i));
 		__m128i sign_masks = _mm_srai_epi16(x, 15); // 0x0000 if positive, 0xFFFF if negative
 		__m128i maybe_positive = _mm_andnot_si128(sign_masks, x); // (~m & x)
@@ -1272,18 +1276,23 @@ static void convert_to_absolute_value_16_block(i16* data, u32 len) {
 		result = _mm_and_si128(result, _mm_set1_epi16(0x7FFF)); // x &= 0x7FFF (clear sign bit)
 		_mm_storeu_si128((__m128i*)(data + i), result);
 	}
-	if (i < len) {
-		for (; i < len; ++i) {
-			data[i] = signed_magnitude_to_twos_complement_16(data[i]) & 0x7FFF;
-		}
-	}
-#else
-    // Slow version
-    i32 i = 0;
-	for (; i < len; ++i) {
-		data[i] = signed_magnitude_to_twos_complement_16(data[i]) & 0x7FFF;
-	}
+#elif defined(__ARM_NEON)
+    // NEON version for ARM processors
+    for (; i < len; i += 8) {
+        uint16x8_t x = vld1q_u16((u16*)data + i);
+        int16x8_t sign_masks = vshrq_n_s16((int16x8_t)x, 15);
+        uint16x8_t maybe_positive = vbicq_u16(x, (uint16x8_t)sign_masks);
+        uint16x8_t value_if_negative = vsubq_u16(vandq_u16(x, vdupq_n_u16(0x8000)), x);
+        uint16x8_t maybe_negative = vandq_u16((uint16x8_t)sign_masks, value_if_negative);
+        uint16x8_t result = vorrq_u16(maybe_positive, maybe_negative);
+        result = vbicq_u16(result, vdupq_n_u16(0x8000)); // clear sign bit
+        vst1q_u16((u16*)data + i, result);
+    }
 #endif
+    // Slow version, for last 0-7 elements or in case SIMD isn't available
+	for (; i < len; ++i) {
+		data[i] = (i16)(signed_magnitude_to_twos_complement_16((u16)data[i]) & 0x7FFF);
+	}
 	ASSERT(i == len);
 }
 
@@ -1918,7 +1927,7 @@ u32* isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 
 
 	// For the Y (luminance) color channel, we actually need the absolute value of the Y-channel wavelet coefficient.
 	// (This doesn't hold for Co and Cg, those are are used directly as signed integers)
-	convert_to_absolute_value_16_block(Y, idwt_width * idwt_height);
+    signed_magnitude_to_absolute_value_16_block(Y, idwt_width * idwt_height);
 
 	// Reconstruct RGB image from separate color channels while cutting off margins
 	i64 start = get_clock();
