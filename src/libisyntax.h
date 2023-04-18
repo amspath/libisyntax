@@ -63,6 +63,8 @@ void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 // Note: must use libisyntax_tile_free_pixels() to free out_pixels.
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
                                      int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels);
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels);
 void            libisyntax_tile_free_pixels(uint32_t* pixels);
 
 

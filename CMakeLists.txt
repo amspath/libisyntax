@@ -68,6 +68,11 @@ target_include_directories(isyntax-to-tiff PRIVATE ${VIPS_INCLUDE_DIRS})
 target_link_libraries(isyntax-to-tiff PRIVATE ${VIPS_LIBRARIES})
 
 
+add_executable(isyntax_example2
+        src/isyntax_example2.c
+        ${LIBISYNTAX_COMMON_SOURCE_FILES}
+        )
+
 if (WIN32)
     target_link_libraries(libisyntax winmm)
     target_link_libraries(isyntax_example winmm)
