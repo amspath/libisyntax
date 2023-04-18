@@ -44,6 +44,11 @@ add_executable(isyntax_example
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
 
+add_executable(isyntax_example2
+        src/isyntax_example2.c
+        ${LIBISYNTAX_COMMON_SOURCE_FILES}
+        )
+
 if (WIN32)
     target_link_libraries(libisyntax winmm)
     target_link_libraries(isyntax_example winmm)
