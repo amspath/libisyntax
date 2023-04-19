@@ -218,6 +218,15 @@ int32_t libisyntax_level_get_scale(const isyntax_level_t* level) {
     return level->scale;
 }
 
+// TODO(jt): Signature equivalent with openslide would be openslide_get_level_dimensions(isyntax_image_t *isyntax, int32_t level, int64_t *w, int64_t *h) {
+int32_t libisyntax_level_get_width(const isyntax_level_t* level) {
+    return level->width;
+}
+
+int32_t libisyntax_level_get_height(const isyntax_level_t* level) {
+    return level->height;
+}
+
 int32_t libisyntax_level_get_width_in_tiles(const isyntax_level_t* level) {
     return level->width_in_tiles;
 }
@@ -296,12 +305,19 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
 isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
-    // Get the level
-    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
 
+    // Get the level
+    assert(level < &isyntax->images[0].level_count);
+    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
+    
     // Setup the origin offset
     x += current_level->origin_offset_in_pixels;
     y += current_level->origin_offset_in_pixels;
+
+    // Check bounds
+    // TODO: Figure out if the bounds are starting from x = 0 or from the offset
+    assert(x + width <= current_level->width);
+    assert(y + height <= current_level->height);
 
     int32_t tile_width = isyntax->tile_width;
     int32_t tile_height = isyntax->tile_height;

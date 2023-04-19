@@ -275,6 +275,8 @@ typedef struct isyntax_level_t {
 	i32 scale;
 	i32 width_in_tiles;
 	i32 height_in_tiles;
+    u64 width;
+    u64 height;
 	float downsample_factor;
 	float um_per_pixel_x;
 	float um_per_pixel_y;
