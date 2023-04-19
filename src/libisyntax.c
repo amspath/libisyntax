@@ -296,13 +296,12 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
 isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
-    // TODO: Borrow this value from elsewhere
-    int PER_LEVEL_PADDING = 3;
-    int32_t num_levels = isyntax->images[0].level_count;
-    // TODO: This is probably a property of the isyntax->images[0].levels
-    int32_t offset = ((PER_LEVEL_PADDING << num_levels) - PER_LEVEL_PADDING) >> level;
-    x += offset;
-    y += offset;
+    // Get the level
+    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
+
+    // Setup the origin offset
+    x += current_level->origin_offset_in_pixels;
+    y += current_level->origin_offset_in_pixels;
 
     int32_t tile_width = isyntax->tile_width;
     int32_t tile_height = isyntax->tile_height;
@@ -312,8 +311,6 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     int64_t start_tile_y = y / tile_height;
     int64_t end_tile_y = (y + height - 1) / tile_height;
 
-    // Get the level
-    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
 
     // Allocate memory for region
     *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));

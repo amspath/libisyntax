@@ -2975,9 +2975,9 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 						// (this is also reflected in the x and y coordinates of the codeblocks in the iSyntax header).
 						for (i32 scale = 1; scale < wsi_image->level_count; ++scale) {
 							isyntax_level_t* level = wsi_image->levels + scale;
+                            level->origin_offset_in_pixels = ((PER_LEVEL_PADDING << wsi_image->level_count) - PER_LEVEL_PADDING) >> scale;
                             float offset_in_pixels = (float) (get_first_valid_coef_pixel(scale - 1));
-                            level->origin_offset_in_pixels = offset_in_pixels;
-							float offset_in_um_x = offset_in_pixels * wsi_image->levels[0].um_per_pixel_x;
+                            float offset_in_um_x = offset_in_pixels * wsi_image->levels[0].um_per_pixel_x;
 							float offset_in_um_y = offset_in_pixels * wsi_image->levels[0].um_per_pixel_y;
 							level->origin_offset = (v2f){offset_in_um_x, offset_in_um_y};
 						}

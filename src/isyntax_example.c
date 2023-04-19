@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
         assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
 
         // convert data to the correct pixel format (bgra->rgba).
-        bgra_to_rgba(pixels);
+        bgra_to_rgba(pixels, tile_width, tile_height);
 
         printf("Writing %s...\n", output_png);
         stbi_write_png(output_png, tile_width, tile_height, 4, pixels, tile_width * 4);
