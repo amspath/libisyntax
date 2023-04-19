@@ -1346,7 +1346,7 @@ static u32* convert_ycocg_to_bgra_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg,
 
 	for (i32 y = 0; y < height; ++y) {
 		u32* dest = bgra + (y * width);
-#if 1 && defined(__SSE2__) && defined(__SSSE3__)
+#if defined(__SSE2__) && defined(__SSSE3__)
 		// Fast SIMD version (~2x faster on my system)
 		for (i32 i = 0; i < width; i += 8) {
 			// Do the color space conversion
@@ -1379,7 +1379,25 @@ static u32* convert_ycocg_to_bgra_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg,
 			_mm_storeu_si128((__m128i*)(dest + i), lo);
 			_mm_storeu_si128((__m128i*)(dest + i + 4), hi);
 		}
+#elif defined(__ARM_NEON__)
+        // Fast SIMD version for ARM NEON
+        for (i32 i = 0; i < width; i += 8) {
+            int16x8_t Y_ = vld1q_s16(Y + i);
+            int16x8_t Co_ = vld1q_s16(Co + i);
+            int16x8_t Cg_ = vld1q_s16(Cg + i);
+            int16x8_t tmp = vsubq_s16(Y_, vshrq_n_s16(Cg_, 1));
+            int16x8_t G = vaddq_s16(tmp, Cg_);
+            int16x8_t B = vsubq_s16(tmp, vshrq_n_s16(Co_, 1));
+            int16x8_t R = vaddq_s16(B, Co_);
 
+            uint8x8x4_t bgra_vec;
+            bgra_vec.val[2] = vqmovun_s16(R);
+            bgra_vec.val[1] = vqmovun_s16(G);
+            bgra_vec.val[0] = vqmovun_s16(B);
+            bgra_vec.val[3] = vdup_n_u8(0xFF);
+
+            vst4_u8((uint8_t*)(dest + i), bgra_vec);
+        }
 #else
 		// Slow non-SIMD version
 		for (i32 x = 0; x < width; ++x) {
@@ -3200,3 +3218,5 @@ void isyntax_destroy(isyntax_t* isyntax) {
 	}
 	file_handle_close(isyntax->file_handle);
 }
+
+
