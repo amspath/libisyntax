@@ -1229,10 +1229,11 @@ static inline i32 twos_complement_to_signed_magnitude(u32 x) {
 }
 
 static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
+    u32 aligned_len = (len / 8) * 8;
     u32 i = 0;
 #if defined(__SSE2__)
 	// Fast x86 SIMD version
-	for (; i < len; i += 8) {
+	for (; i < aligned_len; i += 8) {
 		__m128i x = _mm_loadu_si128((__m128i*)(data + i));
 		__m128i sign_masks = _mm_srai_epi16(x, 15); // 0x0000 if positive, 0xFFFF if negative
 		__m128i maybe_positive = _mm_andnot_si128(sign_masks, x); // (~m & x)
@@ -1243,7 +1244,7 @@ static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
 	}
 #elif defined(__ARM_NEON)
     // NEON version for ARM processors
-    for (; i < len; i += 8) {
+    for (; i < aligned_len; i += 8) {
         uint16x8_t x = vld1q_u16(data + i);
         int16x8_t sign_masks = vshrq_n_s16((int16x8_t)x, 15);
         uint16x8_t maybe_positive = vbicq_u16(x, (uint16x8_t)sign_masks);
@@ -1253,7 +1254,7 @@ static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
         vst1q_u16(data + i, result);
     }
 #endif
-    // Slow version, for last 0-7 elements or in case SIMD isn't available
+    // Slow version, for last unaligned elements or in case SIMD isn't available
 	for (; i < len; ++i) {
 		data[i] = signed_magnitude_to_twos_complement_16(data[i]);
 	}
@@ -1263,10 +1264,11 @@ static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
 // Convert a block of 16-bit signed integers to their absolute value
 // Almost the same as the signed magnitude <-> twos complement conversion, except the sign bit is cleared at the end
 static void signed_magnitude_to_absolute_value_16_block(i16* data, u32 len) {
+    u32 aligned_len = (len / 8) * 8;
     u32 i = 0;
 #if defined(__SSE2__)
 	// Fast x86 SIMD version
-	for (; i < len; i += 8) {
+	for (; i < aligned_len; i += 8) {
 		__m128i x = _mm_loadu_si128((__m128i*)(data + i));
 		__m128i sign_masks = _mm_srai_epi16(x, 15); // 0x0000 if positive, 0xFFFF if negative
 		__m128i maybe_positive = _mm_andnot_si128(sign_masks, x); // (~m & x)
@@ -1278,7 +1280,7 @@ static void signed_magnitude_to_absolute_value_16_block(i16* data, u32 len) {
 	}
 #elif defined(__ARM_NEON)
     // NEON version for ARM processors
-    for (; i < len; i += 8) {
+    for (; i < aligned_len; i += 8) {
         uint16x8_t x = vld1q_u16((u16*)data + i);
         int16x8_t sign_masks = vshrq_n_s16((int16x8_t)x, 15);
         uint16x8_t maybe_positive = vbicq_u16(x, (uint16x8_t)sign_masks);
@@ -1289,7 +1291,7 @@ static void signed_magnitude_to_absolute_value_16_block(i16* data, u32 len) {
         vst1q_u16((u16*)data + i, result);
     }
 #endif
-    // Slow version, for last 0-7 elements or in case SIMD isn't available
+    // Slow version, for last unaligned elements or in case SIMD isn't available
 	for (; i < len; ++i) {
 		data[i] = (i16)(signed_magnitude_to_twos_complement_16((u16)data[i]) & 0x7FFF);
 	}
@@ -1343,12 +1345,14 @@ static rgba_t ycocg_to_bgr(i32 Y, i32 Co, i32 Cg) {
 static u32* convert_ycocg_to_bgra_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg, i32 width, i32 height, i32 stride) {
 	i32 first_valid_pixel = ISYNTAX_IDWT_FIRST_VALID_PIXEL;
 	u32* bgra = (u32*)malloc(width * height * sizeof(u32)); // TODO: performance: block allocator
+    i32 aligned_width = (width / 8) * 8;
 
-	for (i32 y = 0; y < height; ++y) {
+	for (i32 y = 0; y < aligned_width; ++y) {
 		u32* dest = bgra + (y * width);
+        i32 i = 0;
 #if defined(__SSE2__) && defined(__SSSE3__)
 		// Fast SIMD version (~2x faster on my system)
-		for (i32 i = 0; i < width; i += 8) {
+		for (; i < aligned_width; i += 8) {
 			// Do the color space conversion
 			__m128i Y_ = _mm_loadu_si128((__m128i*)(Y + i));
 			__m128i Co_ = _mm_loadu_si128((__m128i*)(Co + i));
@@ -1381,7 +1385,7 @@ static u32* convert_ycocg_to_bgra_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg,
 		}
 #elif defined(__ARM_NEON__)
         // Fast SIMD version for ARM NEON
-        for (i32 i = 0; i < width; i += 8) {
+        for (; i < aligned_width; i += 8) {
             int16x8_t Y_ = vld1q_s16(Y + i);
             int16x8_t Co_ = vld1q_s16(Co + i);
             int16x8_t Cg_ = vld1q_s16(Cg + i);
@@ -1398,12 +1402,12 @@ static u32* convert_ycocg_to_bgra_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg,
 
             vst4_u8((uint8_t*)(dest + i), bgra_vec);
         }
-#else
-		// Slow non-SIMD version
-		for (i32 x = 0; x < width; ++x) {
-			((rgba_t*)dest)[x] = ycocg_to_bgr(Y[x], Co[x], Cg[x]);
-		}
 #endif
+        // Slow version, for last unaligned elements or in case SIMD isn't available
+		for (; i < width; ++i) {
+			((rgba_t*)dest)[i] = ycocg_to_bgr(Y[i], Co[i], Cg[i]);
+		}
+
 		Y += stride;
 		Co += stride;
 		Cg += stride;
