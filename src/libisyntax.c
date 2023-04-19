@@ -296,11 +296,13 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
 isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
-    // Compute the offset
-    // TODO: Is this always in [0]?
-    v2f offset = isyntax->images[0].levels[level].origin_offset;
-    x += (int64_t) (offset.x * isyntax->mpp_x);
-    y += (int64_t) (offset.y * isyntax->mpp_y);
+    // TODO: Borrow this value from elsewhere
+    int PER_LEVEL_PADDING = 3;
+    int32_t num_levels = isyntax->images[0].level_count;
+    // TODO: This is probably a property of the isyntax->images[0].levels
+    int32_t offset = ((PER_LEVEL_PADDING << num_levels) - PER_LEVEL_PADDING) >> level;
+    x += offset;
+    y += offset;
 
     int32_t tile_width = isyntax->tile_width;
     int32_t tile_height = isyntax->tile_height;
