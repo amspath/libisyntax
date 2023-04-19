@@ -311,18 +311,12 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     int64_t start_tile_y = y / tile_height;
     int64_t end_tile_y = (y + height - 1) / tile_height;
 
-
     // Allocate memory for region
     *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
 
     // Read tiles and copy the relevant portion of each tile to the region
     for (int64_t tile_y = start_tile_y; tile_y <= end_tile_y; ++tile_y) {
         for (int64_t tile_x = start_tile_x; tile_x <= end_tile_x; ++tile_x) {
-
-            // Check if tile exists
-            int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
-            bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
-
             // Calculate the portion of the tile to be copied
             int64_t src_x = (tile_x == start_tile_x) ? x % tile_width : 0;
             int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
@@ -333,6 +327,11 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
             int64_t copy_height = (tile_y == end_tile_y) ? (y + height) % tile_height : tile_height - src_y;
 
             uint32_t *pixels = NULL;
+
+            // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
+            // tile.
+            int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
+            bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
             if (tile_exists) {
                 // Read tile
                 assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
