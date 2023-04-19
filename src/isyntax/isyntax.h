@@ -281,7 +281,7 @@ typedef struct isyntax_level_t {
 	float x_tile_side_in_um;
 	float y_tile_side_in_um;
 	u64 tile_count;
-	float origin_offset_in_pixels;
+	i32 origin_offset_in_pixels;
 	v2f origin_offset;
 	isyntax_tile_t* tiles;
 	bool is_fully_loaded;
