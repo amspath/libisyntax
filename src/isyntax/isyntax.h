@@ -272,19 +272,21 @@ typedef struct isyntax_tile_t {
 } isyntax_tile_t;
 
 typedef struct isyntax_level_t {
-	i32 scale;
-	i32 width_in_tiles;
-	i32 height_in_tiles;
-	float downsample_factor;
-	float um_per_pixel_x;
-	float um_per_pixel_y;
-	float x_tile_side_in_um;
-	float y_tile_side_in_um;
-	u64 tile_count;
-	float origin_offset_in_pixels;
-	v2f origin_offset;
-	isyntax_tile_t* tiles;
-	bool is_fully_loaded;
+    i32 scale;
+    i32 width_in_tiles;
+    i32 height_in_tiles;
+    u64 width;
+    u64 height;
+    float downsample_factor;
+    float um_per_pixel_x;
+    float um_per_pixel_y;
+    float x_tile_side_in_um;
+    float y_tile_side_in_um;
+    u64 tile_count;
+    i32 origin_offset_in_pixels;
+    v2f origin_offset;
+    isyntax_tile_t* tiles;
+    bool is_fully_loaded;
 } isyntax_level_t;
 
 typedef struct isyntax_image_t {

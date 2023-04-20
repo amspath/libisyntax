@@ -3063,20 +3063,22 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 
 						}
 
-						// When recursively decoding the tiles, at each iteration the image is slightly offset
-						// to the top left.
+                        // When recursively decoding the tiles, at each iteration the image is slightly offset
+                        // to the top left.
                         // The amount of shift seems correspond to the level padding: ((3 >> (scale-1)) - 2).
-						// (I guess this is related to the way the wavelet transform works.)
-						// Put another way: the highest (zoomed out levels) are shifted the to the bottom right
-						// (this is also reflected in the x and y coordinates of the codeblocks in the iSyntax header).
-						for (i32 scale = 1; scale < wsi_image->level_count; ++scale) {
-							isyntax_level_t* level = wsi_image->levels + scale;
+                        // (I guess this is related to the way the wavelet transform works.)
+                        // Put another way: the highest (zoomed out levels) are shifted the to the bottom right
+                        // (this is also reflected in the x and y coordinates of the codeblocks in the iSyntax header).
+                        for (i32 scale = 0; scale < wsi_image->level_count; ++scale) {
+                            isyntax_level_t* level = wsi_image->levels + scale;
+                            level->origin_offset_in_pixels = ((PER_LEVEL_PADDING << wsi_image->level_count) - PER_LEVEL_PADDING) >> scale;
+                            level->width = wsi_image->width >> scale;
+                            level->height = wsi_image->height >> scale;
                             float offset_in_pixels = (float) (get_first_valid_coef_pixel(scale - 1));
-                            level->origin_offset_in_pixels = offset_in_pixels;
-							float offset_in_um_x = offset_in_pixels * wsi_image->levels[0].um_per_pixel_x;
-							float offset_in_um_y = offset_in_pixels * wsi_image->levels[0].um_per_pixel_y;
-							level->origin_offset = (v2f){offset_in_um_x, offset_in_um_y};
-						}
+                            float offset_in_um_x = offset_in_pixels * wsi_image->levels[0].um_per_pixel_x;
+                            float offset_in_um_y = offset_in_pixels * wsi_image->levels[0].um_per_pixel_y;
+                            level->origin_offset = (v2f){offset_in_um_x, offset_in_um_y};
+                        }
 
 						parse_ticks_elapsed += (get_clock() - parse_begin);
 //						console_print("iSyntax: the seektable is %u bytes, or %g%% of the total file size\n", seektable_size, (float)((float)seektable_size * 100.0f) / isyntax->filesize);
