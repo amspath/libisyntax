@@ -1,334 +1,308 @@
 #include "libisyntax.h"
-
+#include "tiffio.h"
 #include <stdint.h>
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
-#include <vips/vips.h>
-#include <vips/foreign.h>
-#include <glib-object.h>
+#include <time.h>
+
 
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
-
-#include <stdint.h>
-#if defined(__ARM_NEON)
-#include <arm_neon.h>
-#elif defined(__SSE2__)
-#include <emmintrin.h>
-#endif
-
-void bgra_to_rgba(uint32_t* pixels, int tile_width, int tile_height) {
-    int num_pixels = tile_width * tile_height;
-
-#if defined(__ARM_NEON)
-    for (int i = 0; i < num_pixels; i += 4) {
-        uint32x4_t bgra = vld1q_u32(pixels + i);
-        uint32x4_t b_mask = vdupq_n_u32(0x000000FF);
-        uint32x4_t r_mask = vdupq_n_u32(0x00FF0000);
-        uint32x4_t b = vandq_u32(bgra, b_mask);
-        uint32x4_t r = vandq_u32(bgra, r_mask);
-        uint32x4_t br_swapped = vorrq_u32(vshlq_n_u32(b, 16), vshrq_n_u32(r, 16));
-        uint32x4_t ga_alpha_mask = vdupq_n_u32(0xFF00FF00);
-        uint32x4_t ga_alpha = vandq_u32(bgra, ga_alpha_mask);
-        uint32x4_t rgba = vorrq_u32(ga_alpha, br_swapped);
-        vst1q_u32(pixels + i, rgba);
-    }
-#elif defined(__SSE2__)
-    for (int i = 0; i < num_pixels; i += 4) {
-        __m128i bgra = _mm_loadu_si128((__m128i*)(pixels + i));
-        __m128i b_mask = _mm_set1_epi32(0x000000FF);
-        __m128i r_mask = _mm_set1_epi32(0x00FF0000);
-        __m128i b = _mm_and_si128(bgra, b_mask);
-        __m128i r = _mm_and_si128(bgra, r_mask);
-        __m128i br_swapped = _mm_or_si128(_mm_slli_epi32(b, 16), _mm_srli_epi32(r, 16));
-        __m128i ga_alpha_mask = _mm_set1_epi32(0xFF00FF00);
-        __m128i ga_alpha = _mm_and_si128(bgra, ga_alpha_mask);
-        __m128i rgba = _mm_or_si128(ga_alpha, br_swapped);
-        _mm_storeu_si128((__m128i*)(pixels + i), rgba);
-    }
-#else
-    for (int i = 0; i < num_pixels; ++i) {
-        uint32_t val = pixels[i];
-        pixels[i] = ((val & 0xff) << 16) | (val & 0x00ff00) | ((val & 0xff0000) >> 16) | (val & 0xff000000);
-    }
-#endif
+void update_progress(int32_t total_progress, int32_t page_progress, int32_t page_number, double eta) {
+    printf("\rProgress: %3d%% | Page %d progress: %3d%% | ETA: %.0fs", total_progress, page_number, page_progress, eta);
+    fflush(stdout);
 }
 
 
+void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *isyntax_cache, isyntax_level_t *level,
+                        int32_t tile_width, int32_t tile_height, int32_t *total_tiles_written, int32_t total_tiles,
+                        clock_t global_start_time, uint16_t compression_type, uint16_t quality) {
+    int32_t width = libisyntax_level_get_width(level);
+    int32_t height = libisyntax_level_get_height(level);
+    int32_t scale = libisyntax_level_get_scale(level);
 
-typedef struct _VipsForeignLoadIsyntax {
-    VipsForeignLoad parent_object;
-    isyntax_t *isyntax;
-    isyntax_cache_t *isyntax_cache;
-    const isyntax_image_t *wsi_image;
-    const isyntax_level_t *level;
-    int32_t tile_width;
-    int32_t tile_height;
-    int32_t num_tiles_x;
-    int32_t num_tiles_y;
-} VipsForeignLoadIsyntax;
+    // Set the TIFF properties for the current level.
+    TIFFSetField(output_tiff, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(output_tiff, TIFFTAG_IMAGELENGTH, height);
+    TIFFSetField(output_tiff, TIFFTAG_BITSPERSAMPLE, 8);
+    TIFFSetField(output_tiff, TIFFTAG_SAMPLESPERPIXEL, 4);
 
-typedef VipsForeignLoadClass VipsForeignLoadIsyntaxClass;
+    if (compression_type == COMPRESSION_JPEG) {
+        TIFFSetField(output_tiff, TIFFTAG_COMPRESSION, COMPRESSION_JPEG);
+        TIFFSetField(output_tiff, TIFFTAG_JPEGQUALITY, quality);
+    } else if (compression_type == COMPRESSION_LZW) {
+        TIFFSetField(output_tiff, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+    }
 
-G_DEFINE_TYPE(VipsForeignLoadIsyntax, vips_foreign_load_isyntax, VIPS_TYPE_FOREIGN_LOAD);
+    TIFFSetField(output_tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+    TIFFSetField(output_tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+    TIFFSetField(output_tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+    TIFFSetField(output_tiff, TIFFTAG_TILEWIDTH, tile_width);
+    TIFFSetField(output_tiff, TIFFTAG_TILELENGTH, tile_height);
 
+    // Set the resolution
+    double res_x = 10000.0 / libisyntax_level_get_mpp_x(level);
+    TIFFSetField(output_tiff, TIFFTAG_XRESOLUTION, res_x);
+    double res_y = 10000.0 / libisyntax_level_get_mpp_y(level);
+    TIFFSetField(output_tiff, TIFFTAG_YRESOLUTION, res_y);
+    TIFFSetField(output_tiff, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
+    TIFFSetField(output_tiff, TIFFTAG_EXTRASAMPLES, 1, (uint16_t[]) {EXTRASAMPLE_UNASSALPHA});
 
-//static int
-//isyntax_generate(VipsRegion *out, void *seq, void *a, void *b, gboolean *stop) {
-//    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *) a;
-//    VipsRect *r = &out->valid;
-//
-//    int32_t tile_width = isyntax->tile_width;
-//    int32_t tile_height = isyntax->tile_height;
-//
-//    int32_t level = 0;
-//    uint32_t *pixels = NULL;
-//
-//    // Calculate the tile range for the region
-//    int32_t tile_start_x = r->left / tile_width;
-//    int32_t tile_end_x = (r->left + r->width + tile_width - 1) / tile_width;
-//    int32_t tile_start_y = r->top / tile_height;
-//    int32_t tile_end_y = (r->top + r->height + tile_height - 1) / tile_height;
-//
-//    for (int32_t tile_y = tile_start_y; tile_y < tile_end_y; ++tile_y) {
-//        for (int32_t tile_x = tile_start_x; tile_x < tile_end_x; ++tile_x) {
-//            assert(libisyntax_tile_read(isyntax->isyntax, isyntax->isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
-//            bgra_to_rgba(pixels, tile_width, tile_height);
-//
-//            // Calculate the intersection of the region and the tile
-//            VipsRect tile_rect = {
-//                    .left = tile_x * tile_width,
-//                    .top = tile_y * tile_height,
-//                    .width = tile_width,
-//                    .height = tile_height
-//            };
-//            VipsRect intersection;
-//            vips_rect_intersectrect(r, &tile_rect, &intersection);
-//
-//            // Copy the intersection area from the tile to the output region
-//            for (int y = intersection.top; y < VIPS_RECT_BOTTOM(&intersection); y++) {
-//                uint32_t *p = (uint32_t *) VIPS_REGION_ADDR(out, intersection.left, y);
-//                uint32_t *q = pixels + (y - tile_rect.top) * tile_width + (intersection.left - tile_rect.left);
-//
-//                memcpy(p, q, intersection.width * sizeof(uint32_t));
-//            }
-//        }
-//    }
-//
-//    // Free the pixels buffer if needed
-//    if (pixels) {
-//        free(pixels);
-//        /* Free the pixels buffer */
-//    }
-//
-//    return (0);
-//}
+    if (level == 0) {
+        TIFFSetField(output_tiff, TIFFTAG_SUBFILETYPE, 0);
+    } else {
+        TIFFSetField(output_tiff, TIFFTAG_SUBFILETYPE, FILETYPE_REDUCEDIMAGE);
+    }
 
-static void
-read_region(VipsForeignLoadIsyntax *isyntax, VipsRegion *out, const VipsRect *r) {
-    int32_t tile_width = isyntax->tile_width;
-    int32_t tile_height = isyntax->tile_height;
+    int32_t tile_progress = 0;
+    int32_t tiles_in_page = ((height - 1) / tile_height) * ((width - 1) / tile_width) + 2;
 
-    int32_t level = 0;
-    uint32_t *pixels = NULL;
+    for (int32_t y_coord = 0; y_coord < height; y_coord += tile_height) {
+        for (int32_t x_coord = 0; x_coord < width; x_coord += tile_width) {
+            // At the borders the tile size can be smaller
+            int32_t region_width = (x_coord + tile_width > width) ? width - x_coord : tile_width;
+            int32_t region_height = (y_coord + tile_height > height) ? height - y_coord : tile_height;
 
-    // Calculate the tile range for the region
-    int32_t tile_start_x = r->left / tile_width;
-    int32_t tile_end_x = (r->left + r->width + tile_width - 1) / tile_width;
-    int32_t tile_start_y = r->top / tile_height;
-    int32_t tile_end_y = (r->top + r->height + tile_height - 1) / tile_height;
+            uint32_t *pixels = NULL;
+            assert(libisyntax_read_region(isyntax, isyntax_cache, scale, x_coord, y_coord, region_width, region_height,
+                                          &pixels) == LIBISYNTAX_OK);
 
-    for (int32_t tile_y = tile_start_y; tile_y < tile_end_y; ++tile_y) {
-        for (int32_t tile_x = tile_start_x; tile_x < tile_end_x; ++tile_x) {
-            assert(libisyntax_tile_read(isyntax->isyntax, isyntax->isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
-            bgra_to_rgba(pixels, tile_width, tile_height);
+            // Convert data to the correct pixel format (bgra->rgba).
+            bgra_to_rgba(pixels, region_width, region_height);
 
-            // Calculate the intersection of the region and the tile
-            VipsRect tile_rect = {
-                    .left = tile_x * tile_width,
-                    .top = tile_y * tile_height,
-                    .width = tile_width,
-                    .height = tile_height
-            };
-            VipsRect intersection;
-            vips_rect_intersectrect(r, &tile_rect, &intersection);
+            uint32_t *tile_pixels = pixels;
 
-            // Copy the intersection area from the tile to the output region
-            for (int y = intersection.top; y < VIPS_RECT_BOTTOM(&intersection); y++) {
-                uint32_t *p = (uint32_t *) VIPS_REGION_ADDR(out, intersection.left, y);
-                uint32_t *q = pixels + (y - tile_rect.top) * tile_width + (intersection.left - tile_rect.left);
-
-                memcpy(p, q, intersection.width * sizeof(uint32_t));
+            if (region_width != tile_width || region_height != tile_height) {
+                tile_pixels = calloc(tile_width * tile_height, sizeof(uint32_t));
+                for (int32_t row = 0; row < region_height; ++row) {
+                    memcpy(tile_pixels + row * tile_width, pixels + row * region_width,
+                           region_width * sizeof(uint32_t));
+                }
             }
+
+            // Write the tile to the output TIFF.
+            TIFFWriteTile(output_tiff, tile_pixels, x_coord, y_coord, 0, 0);
+
+            ++tile_progress;
+            int32_t tile_percent = (tile_progress * 100) / tiles_in_page;
+            int32_t total_progress = ((*total_tiles_written + tile_progress) * 100) / total_tiles;
+
+            // Calculate ETA
+            clock_t current_global_time = clock();
+            double elapsed_global_time = (double) (current_global_time - global_start_time) / CLOCKS_PER_SEC;
+            double avg_time_per_tile = elapsed_global_time / (*total_tiles_written + tile_progress);
+            double eta = avg_time_per_tile * (total_tiles - (*total_tiles_written + tile_progress));
+            update_progress(total_progress, tile_percent, scale, eta);
+
+            libisyntax_tile_free_pixels(pixels);
         }
     }
 
-    // Free the pixels buffer if needed
-    if (pixels) {
-        free(pixels);
-    }
+    // Write the directory for the current level.
+    TIFFWriteDirectory(output_tiff);
 }
 
-static int
-isyntax_generate(VipsRegion *out, void *seq, void *a, void *b, gboolean *stop) {
-    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *) a;
-    VipsRect *r = &out->valid;
+uint64_t parse_cache_size(const char *size_str) {
+    uint64_t size;
+    char unit;
 
-    read_region(isyntax, out, r);
-
-    return 0;
-}
-
-
-/* Header function for VipsForeignLoadIsyntax */
-static int
-vips_foreign_load_isyntax_header(VipsForeignLoad *load) {
-    VipsForeignLoadIsyntax *isyntax_load = (VipsForeignLoadIsyntax *)load;
-    isyntax_t *isyntax = isyntax_load->isyntax;
-    isyntax_cache_t *isyntax_cache = isyntax_load->isyntax_cache;
-    const isyntax_image_t *wsi_image = isyntax_load->wsi_image;
-    const isyntax_level_t *level = isyntax_load->level;
-
-
-    // Set the image properties using the appropriate libisyntax functions
-
-    int width = libisyntax_get_(level);
-    int height = 100; // libisyntax_level_get_height(level);
-    int bands = 4; // Assuming RGBA
-
-    vips_image_init_fields(load->out,
-                           width,
-                           height,
-                           bands,
-                           VIPS_FORMAT_UCHAR, // Adjust this according to your image format
-                           VIPS_CODING_NONE,
-                           VIPS_INTERPRETATION_sRGB, // Adjust this according to your image interpretation
-                           1.0, 1.0);
-
-    return 0;
-}
-
-/* Load function for VipsForeignLoadIsyntax */
-static int
-vips_foreign_load_isyntax_load(VipsForeignLoad *load) {
-    VipsForeignLoadIsyntax *isyntax = (VipsForeignLoadIsyntax *)load;
-
-    VipsImage **t = (VipsImage **)vips_object_local_array(VIPS_OBJECT(load), 1);
-    t[0] = vips_image_new();
-
-    // Call isyntax_generate function
-    if (vips_image_generate(t[0],
-                            NULL, isyntax_generate, NULL,
-                            isyntax, NULL)) {
-        return -1;
-    }
-
-    if (vips_image_write(t[0], load->real)) {
-        return -1;
-    }
-
-    return 0;
-}
-
-/* Class init function for VipsForeignLoadIsyntax */
-static void
-vips_foreign_load_isyntax_class_init(VipsForeignLoadIsyntaxClass *klass) {
-    GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
-    VipsObjectClass *object_class = VIPS_OBJECT_CLASS(klass);
-    VipsForeignLoadClass *foreign_load_class = (VipsForeignLoadClass *)klass;
-
-    gobject_class->set_property = vips_object_set_property;
-    gobject_class->get_property = vips_object_get_property;
-
-    object_class->nickname = "isyntaxload";
-    object_class->description = "Load an isyntax image";
-
-    /* Add your properties here using vips_object_class_install_property() */
-
-    foreign_load_class->header = vips_foreign_load_isyntax_header;
-    foreign_load_class->load = vips_foreign_load_isyntax_load;
-}
-
-/* Register the VipsForeignLoadIsyntax class with libvips */
-static void
-vips_foreign_load_isyntax_register(void) {
-    static gboolean registered = FALSE;
-    static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
-
-    if (!registered) {
-        g_static_mutex_lock(&mutex);
-
-        if (!registered) {
-            GType type = g_type_register_static_simple(
-                    VIPS_TYPE_FOREIGN_LOAD,
-                    g_intern_static_string("VipsForeignLoadIsyntax"),
-                    sizeof(VipsForeignLoadIsyntaxClass),
-                    (GClassInitFunc)vips_foreign_load_isyntax_class_init,
-                    sizeof(VipsForeignLoadIsyntax),
-                    (GInstanceInitFunc)vips_foreign_load_isyntax_init,
-                    0);
-            registered = TRUE;
+    if (sscanf(size_str, "%lld%c", &size, &unit) == 2) {
+        if (unit == 'M') {
+            if (size > INT64_MAX / (1024)) {
+                printf("Error: Cache size too large.\n");
+                return -1;
+            }
+            size *= 1024;
+        } else if (unit == 'G') {
+            if (size > INT64_MAX / (1024 * 1024)) {
+                printf("Error: Cache size too large.\n");
+                return -1;
+            }
+            size *= 1024 * 1024;
+        } else {
+            printf("Error: Invalid unit for cache size. Use 'M' for megabytes or 'G' for gigabytes.\n");
+            return -1;
         }
-
-        g_static_mutex_unlock(&mutex);
+    } else if (sscanf(size_str, "%lld", &size) != 1) {
+        printf("Error: Invalid cache size format.\n");
+        return -1;
     }
-}
 
-static void
-vips_foreign_load_isyntax_init(VipsForeignLoadIsyntax *isyntax) {
-    /* Initialize other members */
-
-    isyntax->tile_width = libisyntax_get_tile_width(isyntax->isyntax);
-    isyntax->tile_height = libisyntax_get_tile_height(isyntax->isyntax);
+    return size;
 }
 
 
+int main(int argc, char **argv) {
+    const char *usage_string =
+            "Usage: isyntax-to-tiff [OPTIONS] INPUT OUTPUT\n\n"
+            "Converts Philips iSyntax files to multi-resolution TIFF files.\n\n"
+            "Positional arguments:\n"
+            "  INPUT                 Path to the input iSyntax file.\n"
+            "  OUTPUT                Path to the output TIFF file.\n\n"
+            "Options:\n"
+            "  --tile-size SIZE      Specifies the tile size for the output TIFF (default: 1024).\n"
+            "                        Must be a positive integer.\n\n"
+            "  --compression TYPE    Specifies the compression type for the output TIFF.\n"
+            "                        Supported types: JPEG, LZW, NONE (default: JPEG).\n\n"
+            "  --quality VALUE       Specifies the quality for JPEG compression (0-100).\n"
+            "                        Only applicable when using JPEG compression (default: 80).\n\n"
+            "  --cache-size SIZE     Specifies the cache size for the iSyntax library.\n"
+            "                        Accepts a number followed by 'M' (for megabytes) or 'G' (for gigabytes),\n"
+            "                        or just a number for kilobytes (default: 2000).\n\n"
+            "Example:\n\n"
+            "  isyntax-to-tiff --tile-size 512 --compression JPEG --quality 90 --cache-size 1G input.isyntax output.tiff\n\n"
+            "This command will convert the input.isyntax file into an output.tiff file with a tile size of 512, JPEG compression at 90 quality, and a cache size of 1 gigabyte.\n";
 
-int main(int argc, char** argv) {
-    vips_foreign_load_isyntax_register();
-
-    if (VIPS_INIT(argv[0])) {
-        vips_error_exit("Failed to initialize vips");
+    if (argc < 3) {
+        printf("Error: Missing input and/or output file arguments.\n\n");
+        printf("%s", usage_string);
+        return -1;
     }
 
-    if (argc <= 1) {
-        printf("Usage: %s <isyntax_file> <output.tiff> - convert an isyntax image to a tiff.", argv[0]);
-        return 0;
-    }
+    char *filename = argv[1];
+    char *output_tiffname = argv[2];
 
-    char* filename = argv[1];
-    char* output_file = argv[2];
+    uint64_t cache_size = 2000;
+    int32_t tile_size = 1024;
+
+    int compression_type = COMPRESSION_JPEG;
+    int quality = 80;
+
+    for (int i = 3; i < argc; ++i) {
+        if (strcmp(argv[i], "--tile-size") == 0) {
+            if (i + 1 < argc) {
+                tile_size = atoi(argv[i + 1]);
+                if (tile_size <= 0) {
+                    printf("Error: Invalid tile size. Please provide a positive integer value for the tile size.\n");
+                    return -1;
+                }
+                i++; // Skip the next argument (tile size value)
+            } else {
+                printf("Error: Missing value for --tile-size option.\n");
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--compression") == 0) {
+            if (i + 1 < argc) {
+                if (strcmp(argv[i + 1], "JPEG") == 0) {
+                    compression_type = COMPRESSION_JPEG;
+                } else if (strcmp(argv[i + 1], "LZW") == 0) {
+                    compression_type = COMPRESSION_LZW;
+                } else if (strcmp(argv[i + 1], "NONE") == 0) {
+                    compression_type = COMPRESSION_NONE;
+                } else {
+                    printf("Error: Invalid compression type. Supported types are JPEG, LZW, and NONE.\n");
+                    return -1;
+                }
+                i++; // Skip the next argument (compression type value)
+            } else {
+                printf("Error: Missing value for --compression option.\n");
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--quality") == 0) {
+            if (i + 1 < argc) {
+                quality = atoi(argv[i + 1]);
+                if (quality < 0 || quality > 100) {
+                    printf("Error: Invalid quality value. Please provide an integer value between 0 and 100 for the quality.\n");
+                    return -1;
+                }
+                if (compression_type != COMPRESSION_JPEG) {
+                    printf("Warning: The --quality flag is ignored with the current compression type. Quality is only applicable to JPEG compressions.\n");
+                }
+                i++; // Skip the next argument (quality value)
+            } else {
+                printf("Error: Missing value for --quality option.\n");
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--cache-size") == 0) {
+            if (i + 1 < argc) {
+                cache_size = parse_cache_size(argv[i + 1]);
+                if (cache_size >= INT64_MAX || cache_size < 0) {
+                    printf("Error: Cache size not suitable for the system.\n");
+                    return -1;
+                }
+                i++; // Skip the next argument (cache size value)
+            } else {
+                printf("Error: Missing value for --cache-size option.\n");
+                return -1;
+            }
+
+        } else {
+            printf("Error: Unknown option %s\n", argv[i]);
+            return -1;
+        }
+    }
+    int32_t tile_width = tile_size;
+    int32_t tile_height = tile_size;
 
     libisyntax_init();
 
-    isyntax_t* isyntax;
+    isyntax_t *isyntax;
     if (libisyntax_open(filename, /*is_init_allocators=*/0, &isyntax) != LIBISYNTAX_OK) {
         fprintf(stderr, "Failed to open %s\n", filename);
         return -1;
     }
-    printf("Successfully opened %s\n", filename);
+
+    int32_t internal_tile_width = libisyntax_get_tile_width(isyntax);
+    int32_t internal_tile_height = libisyntax_get_tile_height(isyntax);
+    LOG_VAR("%d", internal_tile_width);
+    LOG_VAR("%d", internal_tile_height);
+    LOG_VAR("%llu", cache_size);
+    LOG_VAR("%d", compression_type);
+    LOG_VAR("%d", quality);
+    LOG_VAR("%d", tile_size);
 
     isyntax_cache_t *isyntax_cache = NULL;
-    assert(libisyntax_cache_create("tiff conversion cache", 200000, &isyntax_cache) == LIBISYNTAX_OK);
-    assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
+    if (libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) != LIBISYNTAX_OK) {
+        fprintf(stderr, "Failed to create iSyntax cache with size %llu.\n", cache_size);
+        libisyntax_close(isyntax);
+        return -1;
+    }
+    if (libisyntax_cache_inject(isyntax_cache, isyntax) != LIBISYNTAX_OK) {
+        fprintf(stderr, "Failed to inject iSyntax cache into iSyntax instance.\n");
+        libisyntax_cache_destroy(isyntax_cache);
+        libisyntax_close(isyntax);
+        return -1;
+    }
 
-    int wsi_image_idx = libisyntax_get_wsi_image_index(isyntax);
-    const isyntax_image_t* wsi_image = libisyntax_get_image(isyntax, wsi_image_idx);
+    // Initialize the output TIFF file.
+    TIFF *output_tiff;
+    output_tiff = TIFFOpen(output_tiffname, "w8");
+    if (!output_tiff) {
+        fprintf(stderr, "Failed to create %s\n", output_tiffname);
+        return -1;
+    }
 
-    const isyntax_level_t *base_level = libisyntax_image_get_level(wsi_image, 0);
-    const int32_t tile_height = libisyntax_get_tile_height(isyntax);
-    const int32_t tile_width = libisyntax_get_tile_width(isyntax);
-    const int32_t num_tiles_height = libisyntax_level_get_height_in_tiles(base_level);
-    const int32_t num_tiles_width = libisyntax_level_get_width_in_tiles(base_level);
-    // TODO: The actual width is smaller! Get this from the library.
+    // Write all levels to the output TIFF.
+    int start_at_page = 0;
 
-    uint32_t *pixels = NULL;
+    const isyntax_image_t *image = libisyntax_get_image(isyntax, 0);
+    int32_t num_levels = libisyntax_image_get_level_count(image);
+    int32_t total_tiles = 0;
 
+    // Let's find the total number of tiles so we can have a progress counter
+    for (int32_t level = start_at_page; level < num_levels; ++level) {
+        isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
+        int32_t width = libisyntax_level_get_width(current_level);
+        int32_t height = libisyntax_level_get_height(current_level);
+        int32_t tiles_in_page = ((height - 1) / tile_height) * ((width - 1) / tile_width) + 2;
+        total_tiles += tiles_in_page;
+    }
 
-    libisyntax_tile_free_pixels(pixels);
+    int32_t total_tiles_written = 0;
+    clock_t global_start_time = clock();
+    for (int32_t level = start_at_page; level < num_levels; ++level) {
+        isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
+        write_page_to_tiff(output_tiff, isyntax, isyntax_cache, current_level, tile_width, tile_height,
+                           &total_tiles_written, total_tiles, global_start_time, compression_type, quality);
+    }
+
+    // Close the output TIFF file.
+    TIFFClose(output_tiff);
+
+    // Clean up.
     libisyntax_cache_destroy(isyntax_cache);
     libisyntax_close(isyntax);
-    vips_shutdown();
 
     return 0;
 }
