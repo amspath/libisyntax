@@ -185,17 +185,17 @@ FORCE_INLINE void libc_free(void* memory) {
 // ltalloc provides a faster malloc(), realloc(), free()
 // https://github.com/r-lyeh-archived/ltalloc
 // To replace regular malloc with ltalloc: #define USE_LTALLOC_INSTEAD_OF_MALLOC in config.h
+#ifdef USE_LTALLOC_INSTEAD_OF_MALLOC
 #if __has_include("ltalloc.h")
 #define IS_LTALLOC_AVAILABLE 1
 #include "ltalloc.h"
-#ifdef USE_LTALLOC_INSTEAD_OF_MALLOC
 #define malloc ltmalloc
 #define calloc ltcalloc
 #define free ltfree
 #define realloc ltrealloc
-#endif
 #else
 #define IS_LTALLOC_AVAILABLE 0
+#endif
 #endif
 
 // Typesafe dynamic array and hash tables for C

@@ -15,6 +15,7 @@
 // - Booleans are represented as int32_t and prefxied with 'is_' or 'has_'.
 // - Const applied to pointers is used as a signal that the object will not be modified.
 // - Prefer int even for unsigned types, see java rationale.
+// - Prefer double over float - we are dealing with small/large scales in WSI, and float may not be enough.
 
 
 typedef int32_t isyntax_error_t;
@@ -31,21 +32,28 @@ typedef struct isyntax_level_t isyntax_level_t;
 typedef struct isyntax_cache_t isyntax_cache_t;
 
 //== Common API ==
-isyntax_error_t libisyntax_init();
+// TODO(avirodov): is libisyntax_init thread-safe? Maybe need a general api-level statement about thread-safety.
+isyntax_error_t libisyntax_init(void);
 isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax);
 void            libisyntax_close(isyntax_t* isyntax);
 
 //== Getters API ==
 int32_t                libisyntax_get_tile_width(const isyntax_t* isyntax);
 int32_t                libisyntax_get_tile_height(const isyntax_t* isyntax);
+int32_t                libisyntax_get_is_mpp_known(const isyntax_t* isyntax);
+double                 libisyntax_get_mpp_x(const isyntax_t* isyntax);
+double                 libisyntax_get_mpp_y(const isyntax_t* isyntax);
 int32_t                libisyntax_get_wsi_image_index(const isyntax_t* isyntax);
 const isyntax_image_t* libisyntax_get_image(const isyntax_t* isyntax, int32_t wsi_image_index);
+
 int32_t                libisyntax_image_get_level_count(const isyntax_image_t* image);
 const isyntax_level_t* libisyntax_image_get_level(const isyntax_image_t* image, int32_t index);
 
 int32_t                libisyntax_level_get_scale(const isyntax_level_t* level);
 int32_t                libisyntax_level_get_width_in_tiles(const isyntax_level_t* level);
 int32_t                libisyntax_level_get_height_in_tiles(const isyntax_level_t* level);
+double                 libisyntax_level_get_downsample_factor(const isyntax_level_t* level);
+double                 libisyntax_level_get_origin_offset_in_pixels(const isyntax_level_t* level);
 
 //== Cache API ==
 isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t cache_size,
@@ -55,6 +63,9 @@ isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t 
 //  Block size variation was not observed in practice, and a proper fix may include supporting multiple block sizes
 //  within isyntax_cache_t implementation.
 isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax);
+// Flushes the cache. If 'isyntax_or_null' is not NULL, will attempt to flush only the tiles of that isyntax.
+// TODO(avirodov): currently flushes all cache, isyntax_or_null is unused.
+void            libisyntax_cache_flush(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax_or_null);
 void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 
 
