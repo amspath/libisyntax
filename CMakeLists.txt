@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.15)
 project(libisyntax)
 
 set(CMAKE_C_STANDARD 17)
