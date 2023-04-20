@@ -96,7 +96,7 @@ void get_system_info(bool verbose) {
     SYSTEM_INFO win32_system_info;
     GetSystemInfo(&win32_system_info);
 	system_info.logical_cpu_count = (i32)win32_system_info.dwNumberOfProcessors;
-	system_info.physical_cpu_count = logical_cpu_count; // TODO(pvalkema): how to read this on Windows?
+	system_info.physical_cpu_count = system_info.logical_cpu_count; // TODO(pvalkema): how to read this on Windows?
 	system_info.os_page_size = win32_system_info.dwPageSize;
 #elif APPLE
     size_t physical_cpu_count_len = sizeof(system_info.physical_cpu_count);

@@ -8,6 +8,5 @@ build/
 *.desktop
 *.ini
 *.isyntax
-*.png
 *.json
 *.xml
