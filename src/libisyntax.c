@@ -226,6 +226,22 @@ int32_t libisyntax_level_get_height_in_tiles(const isyntax_level_t* level) {
     return level->height_in_tiles;
 }
 
+int32_t libisyntax_level_get_width(const isyntax_level_t* level) {
+    return level->width;
+}
+
+int32_t libisyntax_level_get_height(const isyntax_level_t* level) {
+    return level->height;
+}
+
+float libisyntax_level_get_mpp_x(const isyntax_level_t* level) {
+    return level->um_per_pixel_x;
+}
+
+float libisyntax_level_get_mpp_y(const isyntax_level_t* level) {
+    return level->um_per_pixel_y;
+}
+
 isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t cache_size,
                                         isyntax_cache_t** out_isyntax_cache)
 {
