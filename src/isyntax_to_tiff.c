@@ -90,10 +90,9 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
             // Calculate ETA
             clock_t current_global_time = clock();
-            double elapsed_global_time = (double)(current_global_time - global_start_time) / CLOCKS_PER_SEC;
+            double elapsed_global_time = (double) (current_global_time - global_start_time) / CLOCKS_PER_SEC;
             double avg_time_per_tile = elapsed_global_time / (*total_tiles_written + tile_progress);
             double eta = avg_time_per_tile * (total_tiles - (*total_tiles_written + tile_progress));
-
             update_progress(total_progress, tile_percent, scale, eta);
 
             libisyntax_tile_free_pixels(pixels);
@@ -295,11 +294,7 @@ int main(int argc, char **argv) {
     for (int32_t level = start_at_page; level < num_levels; ++level) {
         isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
         write_page_to_tiff(output_tiff, isyntax, isyntax_cache, current_level, tile_width, tile_height,
-<<<<<<< HEAD
                            &total_tiles_written, total_tiles, global_start_time, compression_type, quality);
-=======
-                           &total_tiles_written, total_tiles, global_start_time);
->>>>>>> 4e7e1aa (Global eta makes more sense)
     }
 
     // Close the output TIFF file.
