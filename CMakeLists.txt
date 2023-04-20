@@ -16,6 +16,14 @@ include_directories("${CMAKE_SOURCE_DIR}/src/utils")
 include_directories("${CMAKE_SOURCE_DIR}/src/isyntax")
 include_directories("${CMAKE_SOURCE_DIR}/src/third_party")
 
+# Find LibTIFF library
+find_package(TIFF REQUIRED)
+if (NOT TIFF_FOUND)
+    message(WARNING "LibTIFF not found")
+    message(WARNING "Will not compile `isyntax-to-tiff` utility")
+endif()
+include_directories(${TIFF_INCLUDE_DIR})
+
 set(LIBISYNTAX_COMMON_SOURCE_FILES
         src/libisyntax.c
         src/isyntax/isyntax.c
@@ -45,9 +53,21 @@ add_executable(isyntax_example
 )
 
 add_executable(isyntax_example2
-        src/isyntax_example2.c
-        ${LIBISYNTAX_COMMON_SOURCE_FILES}
-        )
+    src/isyntax_example2.c
+    ${LIBISYNTAX_COMMON_SOURCE_FILES}
+)
+
+if (TIFF_FOUND)
+    message(STATUS "Will compile `isyntax-to-tiff` utility")
+    add_executable(isyntax-to-tiff
+    src/isyntax_to_tiff.c
+    ${LIBISYNTAX_COMMON_SOURCE_FILES} ${TIFF_LIBRARIES})
+
+endif()
+
+target_include_directories(isyntax-to-tiff PRIVATE ${TIFF_INCLUDE_DIRS})
+target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES})
+
 
 if (WIN32)
     target_link_libraries(libisyntax winmm)
