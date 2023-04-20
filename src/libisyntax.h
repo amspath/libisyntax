@@ -31,6 +31,7 @@ typedef struct isyntax_level_t isyntax_level_t;
 typedef struct isyntax_cache_t isyntax_cache_t;
 
 //== Common API ==
+// TODO(avirodov): are repeated calls of libisyntax_init() allowed? Currently I believe not.
 isyntax_error_t libisyntax_init();
 isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax);
 void            libisyntax_close(isyntax_t* isyntax);
@@ -61,6 +62,8 @@ void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 //== Tile API ==
 // Note: pixels are in BGRA layout.
 // Note: must use libisyntax_tile_free_pixels() to free out_pixels.
+// TODO(avirodov): are the pixels guaranteed to survive libisyntax_close()? Alternatively, change API to
+//  allow user to supply the buffer, as long as the user can compute the size.
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
                                      int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels);
 void            libisyntax_tile_free_pixels(uint32_t* pixels);
