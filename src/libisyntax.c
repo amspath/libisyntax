@@ -369,7 +369,7 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
                 // Fill up with transparent white pixels (R=255, G=255, B=255, A=0)
                 for (int64_t i = 0; i < copy_height; ++i) {
                     for (int64_t j = 0; j < copy_width; ++j) {
-                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0x00FFFFFF;
+                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0x00FFFFFFu;
                     }
                 }
             }

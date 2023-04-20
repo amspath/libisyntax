@@ -16,7 +16,8 @@ void update_progress(int32_t total_progress, int32_t page_progress, int32_t page
 
 
 void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *isyntax_cache, isyntax_level_t *level,
-                        int32_t tile_width, int32_t tile_height, int32_t *total_tiles_written, int32_t total_tiles) {
+                        int32_t tile_width, int32_t tile_height, int32_t *total_tiles_written, int32_t total_tiles,
+                        clock_t global_start_time) {
     int32_t width = libisyntax_level_get_width(level);
     int32_t height = libisyntax_level_get_height(level);
     int32_t scale = libisyntax_level_get_scale(level);
@@ -85,10 +86,11 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
             int32_t total_progress = ((*total_tiles_written + tile_progress) * 100) / total_tiles;
 
             // Calculate ETA
-            clock_t current_time = clock();
-            double elapsed_time = (double) (current_time - start_time) / CLOCKS_PER_SEC;
-            double avg_time_per_tile = elapsed_time / tile_progress;
-            double eta = avg_time_per_tile * (tiles_in_page - tile_progress);
+            clock_t current_global_time = clock();
+            double elapsed_global_time = (double)(current_global_time - global_start_time) / CLOCKS_PER_SEC;
+            double avg_time_per_tile = elapsed_global_time / (*total_tiles_written + tile_progress);
+            double eta = avg_time_per_tile * (total_tiles - (*total_tiles_written + tile_progress));
+
 
 
             update_progress(total_progress, tile_percent, scale, eta);
@@ -205,10 +207,11 @@ int main(int argc, char **argv) {
     }
 
     int32_t total_tiles_written = 0;
+    clock_t global_start_time = clock();
     for (int32_t level = start_at_page; level < num_levels; ++level) {
         isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
         write_page_to_tiff(output_tiff, isyntax, isyntax_cache, current_level, tile_width, tile_height,
-                           &total_tiles_written, total_tiles);
+                           &total_tiles_written, total_tiles, global_start_time);
     }
 
     // Close the output TIFF file.
