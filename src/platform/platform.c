@@ -108,7 +108,7 @@ void get_system_info(bool verbose) {
     system_info.is_macos = true;
 #elif LINUX
     system_info.logical_cpu_count = sysconf( _SC_NPROCESSORS_ONLN );
-    system_info.physical_cpu_count = system_info.logical_cpu_count; // TODO(pvalkema): how to read this on Linux?
+    system_info.physical_cpu_count = logical_cpu_count; // TODO(pvalkema): how to read this on Linux?
     system_info.os_page_size = (u32) getpagesize();
     system_info.page_alignment_mask = ~((u64)(sysconf(_SC_PAGE_SIZE) - 1));
 #endif
