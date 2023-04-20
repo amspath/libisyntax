@@ -44,16 +44,6 @@ set(LIBISYNTAX_COMMON_SOURCE_FILES
         src/third_party/ltalloc.cc
 )
 
-find_package(Threads REQUIRED)
-if (UNIX AND NOT APPLE) # needed for sem_wait, etc.
-    find_library(RT_LIBRARY rt)
-    set(EXTRA_LIBS ${RT_LIBRARY})
-elseif (APPLE)
-    # No extra libraries needed for macOS
-elseif (WIN32)
-    # No extra libraries needed for Windows
-endif ()
-
 if (WIN32)
     set(LIBISYNTAX_COMMON_SOURCE_FILES ${LIBISYNTAX_COMMON_SOURCE_FILES} src/platform/win32_utils.c)
 else()
