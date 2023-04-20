@@ -90,7 +90,7 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
             // Calculate ETA
             clock_t current_global_time = clock();
-            double elapsed_global_time = (double)(current_global_time - global_start_time) / CLOCKS_PER_SEC;
+            double elapsed_global_time = (double) (current_global_time - global_start_time) / CLOCKS_PER_SEC;
             double avg_time_per_tile = elapsed_global_time / (*total_tiles_written + tile_progress);
             double eta = avg_time_per_tile * (total_tiles - (*total_tiles_written + tile_progress));
             update_progress(total_progress, tile_percent, scale, eta);
@@ -126,6 +126,32 @@ int parse_cache_size(const char *size_str) {
 
 
 int main(int argc, char **argv) {
+    const char *usage_string =
+            "Usage: isyntax-to-tiff [OPTIONS] INPUT OUTPUT\n\n"
+            "Converts Philips iSyntax files to multi-resolution TIFF files.\n\n"
+            "Positional arguments:\n"
+            "  INPUT                 Path to the input iSyntax file.\n"
+            "  OUTPUT                Path to the output TIFF file.\n\n"
+            "Options:\n"
+            "  --tile-size SIZE      Specifies the tile size for the output TIFF (default: 1024).\n"
+            "                        Must be a positive integer.\n\n"
+            "  --compression TYPE    Specifies the compression type for the output TIFF.\n"
+            "                        Supported types: JPEG, LZW, NONE (default: JPEG).\n\n"
+            "  --quality VALUE       Specifies the quality for JPEG compression (0-100).\n"
+            "                        Only applicable when using JPEG compression (default: 80).\n\n"
+            "  --cache-size SIZE     Specifies the cache size for the iSyntax library.\n"
+            "                        Accepts a number followed by 'M' (for megabytes) or 'G' (for gigabytes),\n"
+            "                        or just a number for bytes (default: 2000).\n\n"
+            "Example:\n\n"
+            "  isyntax-to-tiff --tile-size 512 --compression JPEG --quality 90 --cache-size 1G input.isyntax output.tiff\n\n"
+            "This command will convert the input.isyntax file into an output.tiff file with a tile size of 512, JPEG compression at 90 quality, and a cache size of 1 gigabyte.\n";
+
+    if (argc < 3) {
+        printf("Error: Missing input and/or output file arguments.\n\n");
+        printf("%s", usage_string);
+        return -1;
+    }
+    
     char *filename = argv[1];
     char *output_tiffname = argv[2];
 
