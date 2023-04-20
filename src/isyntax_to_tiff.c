@@ -103,20 +103,28 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
     TIFFWriteDirectory(output_tiff);
 }
 
-int parse_cache_size(const char *size_str) {
-    int size;
+uint64_t parse_cache_size(const char *size_str) {
+    uint64_t size;
     char unit;
 
-    if (sscanf(size_str, "%d%c", &size, &unit) == 2) {
+    if (sscanf(size_str, "%lld%c", &size, &unit) == 2) {
         if (unit == 'M') {
-            size *= 1024 * 1024;
+            if (size > INT64_MAX / (1024)) {
+                printf("Error: Cache size too large.\n");
+                return -1;
+            }
+            size *= 1024;
         } else if (unit == 'G') {
-            size *= 1024 * 1024 * 1024;
+            if (size > INT64_MAX / (1024 * 1024)) {
+                printf("Error: Cache size too large.\n");
+                return -1;
+            }
+            size *= 1024 * 1024;
         } else {
             printf("Error: Invalid unit for cache size. Use 'M' for megabytes or 'G' for gigabytes.\n");
             return -1;
         }
-    } else if (sscanf(size_str, "%d", &size) != 1) {
+    } else if (sscanf(size_str, "%lld", &size) != 1) {
         printf("Error: Invalid cache size format.\n");
         return -1;
     }
@@ -141,7 +149,7 @@ int main(int argc, char **argv) {
             "                        Only applicable when using JPEG compression (default: 80).\n\n"
             "  --cache-size SIZE     Specifies the cache size for the iSyntax library.\n"
             "                        Accepts a number followed by 'M' (for megabytes) or 'G' (for gigabytes),\n"
-            "                        or just a number for bytes (default: 2000).\n\n"
+            "                        or just a number for kilobytes (default: 2000).\n\n"
             "Example:\n\n"
             "  isyntax-to-tiff --tile-size 512 --compression JPEG --quality 90 --cache-size 1G input.isyntax output.tiff\n\n"
             "This command will convert the input.isyntax file into an output.tiff file with a tile size of 512, JPEG compression at 90 quality, and a cache size of 1 gigabyte.\n";
@@ -151,11 +159,11 @@ int main(int argc, char **argv) {
         printf("%s", usage_string);
         return -1;
     }
-    
+
     char *filename = argv[1];
     char *output_tiffname = argv[2];
 
-    int64_t cache_size = 2000;
+    uint64_t cache_size = 2000;
     int32_t tile_size = 1024;
 
     int compression_type = COMPRESSION_JPEG;
@@ -209,7 +217,8 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "--cache-size") == 0) {
             if (i + 1 < argc) {
                 cache_size = parse_cache_size(argv[i + 1]);
-                if (cache_size < 0) {
+                if (cache_size >= INT64_MAX || cache_size < 0) {
+                    printf("Error: Cache size not suitable for the system.\n");
                     return -1;
                 }
                 i++; // Skip the next argument (cache size value)
@@ -230,25 +239,37 @@ int main(int argc, char **argv) {
 
     isyntax_t *isyntax;
     if (libisyntax_open(filename, /*is_init_allocators=*/0, &isyntax) != LIBISYNTAX_OK) {
-        printf("Failed to open %s\n", filename);
+        fprintf(stderr, "Failed to open %s\n", filename);
         return -1;
     }
-    printf("Successfully opened %s\n", filename);
 
     int32_t internal_tile_width = libisyntax_get_tile_width(isyntax);
     int32_t internal_tile_height = libisyntax_get_tile_height(isyntax);
     LOG_VAR("%d", internal_tile_width);
     LOG_VAR("%d", internal_tile_height);
+    LOG_VAR("%llu", cache_size);
+    LOG_VAR("%d", compression_type);
+    LOG_VAR("%d", quality);
+    LOG_VAR("%d", tile_size);
 
     isyntax_cache_t *isyntax_cache = NULL;
-    assert(libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) == LIBISYNTAX_OK);
-    assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
+    if (libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) != LIBISYNTAX_OK) {
+        fprintf(stderr, "Failed to create iSyntax cache with size %" PRId64 ".\n", cache_size);
+        libisyntax_close(isyntax);
+        return -1;
+    }
+    if (libisyntax_cache_inject(isyntax_cache, isyntax) != LIBISYNTAX_OK) {
+        fprintf(stderr, "Failed to inject iSyntax cache into iSyntax instance.\n");
+        libisyntax_cache_destroy(isyntax_cache);
+        libisyntax_close(isyntax);
+        return -1;
+    }
 
     // Initialize the output TIFF file.
     TIFF *output_tiff;
     output_tiff = TIFFOpen(output_tiffname, "w8");
     if (!output_tiff) {
-        printf("Failed to create %s\n", output_tiffname);
+        fprintf(stderr, "Failed to create %s\n", output_tiffname);
         return -1;
     }
 
