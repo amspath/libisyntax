@@ -20,11 +20,6 @@ include_directories("${CMAKE_SOURCE_DIR}/src/platform")
 include_directories("${CMAKE_SOURCE_DIR}/src/utils")
 include_directories("${CMAKE_SOURCE_DIR}/src/isyntax")
 include_directories("${CMAKE_SOURCE_DIR}/src/third_party")
-include_directories(${VIPS_INCLUDE_DIRS})
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(VIPS REQUIRED vips)
-
 
 # Find LibTIFF library
 find_package(TIFF REQUIRED)
@@ -33,6 +28,17 @@ if (NOT TIFF_FOUND)
     message(WARNING "Will not compile `isyntax-to-tiff` utility")
 endif()
 include_directories(${TIFF_INCLUDE_DIR})
+find_package(Threads REQUIRED)
+if (UNIX AND NOT APPLE) # needed for sem_wait, etc.
+    find_library(RT_LIBRARY rt)
+    set(EXTRA_LIBS ${RT_LIBRARY})
+elseif (APPLE)
+    # No extra libraries needed for macOS
+elseif (WIN32)
+    # No extra libraries needed for Windows
+endif ()
+
+
 
 set(LIBISYNTAX_COMMON_SOURCE_FILES
         src/libisyntax.c
@@ -62,18 +68,7 @@ add_executable(isyntax_example
         src/isyntax_example.c
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
-message(STATUS "VIPS_INCLUDE_DIRS: ${VIPS_INCLUDE_DIRS}")
-message(STATUS "VIPS_LIBRARY_DIRS: ${VIPS_LIBRARY_DIRS}")
-message(STATUS "VIPS_LIBRARIES: ${VIPS_LIBRARIES}")
 
-link_directories(${VIPS_LIBRARY_DIRS})
-add_executable(isyntax-to-tiff
-        src/isyntax_to_tiff.c
-        ${LIBISYNTAX_COMMON_SOURCE_FILES}
-        )
-
-target_include_directories(isyntax-to-tiff PRIVATE ${VIPS_INCLUDE_DIRS})
-target_link_libraries(isyntax-to-tiff PRIVATE ${VIPS_LIBRARIES})
 
 
 add_executable(isyntax_example2
@@ -90,14 +85,19 @@ if (TIFF_FOUND)
 endif()
 
 target_include_directories(isyntax-to-tiff PRIVATE ${TIFF_INCLUDE_DIRS})
-target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES})
-
 
 if (WIN32)
-    target_link_libraries(libisyntax winmm)
-    target_link_libraries(isyntax_example winmm)
-    target_link_libraries(isyntax-to-tiff winmm)
+    target_link_libraries(libisyntax winmm Threads::Threads)
+    target_link_libraries(isyntax_example winmm Threads::Threads)
+    target_link_libraries(isyntax_example2 winmm Threads::Threads)
+    target_link_libraries(isyntax-to-tiff winmm Threads::Threads)
+
 
 else()
-
+    target_link_libraries(libisyntax Threads::Threads ${EXTRA_LIBS})
+    target_link_libraries(isyntax_example Threads::Threads ${EXTRA_LIBS})
+    target_link_libraries(isyntax_example2 Threads::Threads ${EXTRA_LIBS})
+    if (TIFF_FOUND)
+        target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES} Threads::Threads ${EXTRA_LIBS})
+    endif()
 endif()
