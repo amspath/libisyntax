@@ -48,6 +48,8 @@ int32_t                libisyntax_level_get_width_in_tiles(const isyntax_level_t
 int32_t                libisyntax_level_get_height_in_tiles(const isyntax_level_t* level);
 int32_t                libisyntax_level_get_width(const isyntax_level_t* level);
 int32_t                libisyntax_level_get_height(const isyntax_level_t* level);
+float                  libisyntax_level_get_mpp_x(const isyntax_level_t* level);
+float                  libisyntax_level_get_mpp_y(const isyntax_level_t* level);
 
 //== Cache API ==
 isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t cache_size,

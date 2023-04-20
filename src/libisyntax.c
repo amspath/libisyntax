@@ -218,6 +218,14 @@ int32_t libisyntax_level_get_scale(const isyntax_level_t* level) {
     return level->scale;
 }
 
+float libisyntax_level_get_mpp_x(const isyntax_level_t* level) {
+    return level->um_per_pixel_x;
+}
+
+float libisyntax_level_get_mpp_y(const isyntax_level_t* level) {
+    return level->um_per_pixel_y;
+}
+
 // TODO(jt): Signature equivalent with openslide would be openslide_get_level_dimensions(isyntax_image_t *isyntax, int32_t level, int64_t *w, int64_t *h) {
 int32_t libisyntax_level_get_width(const isyntax_level_t* level) {
     return level->width;
@@ -305,19 +313,19 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
 isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
-
     // Get the level
     assert(level < &isyntax->images[0].level_count);
     isyntax_level_t* current_level = &isyntax->images[0].levels[level];
-    
+
     // Setup the origin offset
-    x += current_level->origin_offset_in_pixels;
-    y += current_level->origin_offset_in_pixels;
+    int32_t offset = current_level->origin_offset_in_pixels;
+    x += offset;
+    y += offset;
 
     // Check bounds
     // TODO: Figure out if the bounds are starting from x = 0 or from the offset
-    assert(x + width <= current_level->width);
-    assert(y + height <= current_level->height);
+    assert(x + width - offset <= current_level->width);
+    assert(y + height - offset <= current_level->height);
 
     int32_t tile_width = isyntax->tile_width;
     int32_t tile_height = isyntax->tile_height;
@@ -358,10 +366,10 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
                            copy_width * sizeof(uint32_t));
                 }
             } else {
-                // Fill up with transparent pixels (R, G, B, A=0)
+                // Fill up with transparent white pixels (R=255, G=255, B=255, A=0)
                 for (int64_t i = 0; i < copy_height; ++i) {
                     for (int64_t j = 0; j < copy_width; ++j) {
-                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0x00000000;
+                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0x00FFFFFF;
                     }
                 }
             }
