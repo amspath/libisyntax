@@ -8,6 +8,13 @@
 
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
+#include <stdint.h>
+#if defined(__ARM_NEON)
+#include <arm_neon.h>
+#elif defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+
 void print_isyntax_levels(isyntax_t* isyntax) {
     int wsi_image_idx = libisyntax_get_wsi_image_index(isyntax);
     LOG_VAR("%d", wsi_image_idx);
