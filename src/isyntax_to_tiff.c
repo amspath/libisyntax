@@ -4,23 +4,32 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
 
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
-void update_progress(int32_t total_progress, int32_t page_progress, int32_t page_number) {
-    printf("\rProgress: %3d%% | Page %d progress: %3d%%", total_progress, page_number, page_progress);
+void update_progress(int32_t total_progress, int32_t page_progress, int32_t page_number, double eta) {
+    printf("\rProgress: %3d%% | Page %d progress: %3d%% | ETA: %.0fs", total_progress, page_number, page_progress, eta);
     fflush(stdout);
 }
-void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *isyntax_cache, isyntax_level_t* level, int32_t tile_width, int32_t tile_height, int32_t total_tiles_written) {
+
+
+void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *isyntax_cache, isyntax_level_t *level,
+                        int32_t tile_width, int32_t tile_height, int32_t *total_tiles_written, int32_t total_tiles) {
     int32_t width = libisyntax_level_get_width(level);
     int32_t height = libisyntax_level_get_height(level);
+    int32_t scale = libisyntax_level_get_scale(level);
 
     // Set the TIFF properties for the current level.
     TIFFSetField(output_tiff, TIFFTAG_IMAGEWIDTH, width);
     TIFFSetField(output_tiff, TIFFTAG_IMAGELENGTH, height);
     TIFFSetField(output_tiff, TIFFTAG_BITSPERSAMPLE, 8);
     TIFFSetField(output_tiff, TIFFTAG_SAMPLESPERPIXEL, 4);
-    TIFFSetField(output_tiff, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+    TIFFSetField(output_tiff, TIFFTAG_COMPRESSION, COMPRESSION_JPEG);
+    // TODO: ImageDescription
+    TIFFSetField(output_tiff, TIFFTAG_JPEGQUALITY, 80);
+
     TIFFSetField(output_tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
     TIFFSetField(output_tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
     TIFFSetField(output_tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
@@ -33,8 +42,7 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
     double res_y = 10000.0 / libisyntax_level_get_mpp_y(level);
     TIFFSetField(output_tiff, TIFFTAG_YRESOLUTION, res_y);
     TIFFSetField(output_tiff, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
-    TIFFSetField(output_tiff, TIFFTAG_EXTRASAMPLES, 1, (uint16_t[]){EXTRASAMPLE_UNASSALPHA});
-
+    TIFFSetField(output_tiff, TIFFTAG_EXTRASAMPLES, 1, (uint16_t[]) {EXTRASAMPLE_UNASSALPHA});
 
     if (level == 0) {
         TIFFSetField(output_tiff, TIFFTAG_SUBFILETYPE, 0);
@@ -42,13 +50,10 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
         TIFFSetField(output_tiff, TIFFTAG_SUBFILETYPE, FILETYPE_REDUCEDIMAGE);
     }
 
-    int32_t total_tiles = (height / tile_height) * (width / tile_width);
     int32_t tile_progress = 0;
+    int32_t tiles_in_page = ((height - 1) / tile_height) * ((width - 1) / tile_width) + 2;
+    clock_t start_time = clock();
 
-    int32_t scale = libisyntax_level_get_scale(level);
-
-    int32_t tiles_in_page = height * width / tile_height / tile_width;
-    // Write the current level tile by tile.
     for (int32_t y_coord = 0; y_coord < height; y_coord += tile_height) {
         for (int32_t x_coord = 0; x_coord < width; x_coord += tile_width) {
             // At the borders the tile size can be smaller
@@ -56,7 +61,8 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
             int32_t region_height = (y_coord + tile_height > height) ? height - y_coord : tile_height;
 
             uint32_t *pixels = NULL;
-            assert(libisyntax_read_region(isyntax, isyntax_cache, scale, x_coord, y_coord, region_width, region_height, &pixels) == LIBISYNTAX_OK);
+            assert(libisyntax_read_region(isyntax, isyntax_cache, scale, x_coord, y_coord, region_width, region_height,
+                                          &pixels) == LIBISYNTAX_OK);
 
             // Convert data to the correct pixel format (bgra->rgba).
             bgra_to_rgba(pixels, region_width, region_height);
@@ -66,7 +72,8 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
             if (region_width != tile_width || region_height != tile_height) {
                 tile_pixels = calloc(tile_width * tile_height, sizeof(uint32_t));
                 for (int32_t row = 0; row < region_height; ++row) {
-                    memcpy(tile_pixels + row * tile_width, pixels + row * region_width, region_width * sizeof(uint32_t));
+                    memcpy(tile_pixels + row * tile_width, pixels + row * region_width,
+                           region_width * sizeof(uint32_t));
                 }
             }
 
@@ -75,7 +82,16 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
             ++tile_progress;
             int32_t tile_percent = (tile_progress * 100) / tiles_in_page;
-            update_progress(total_tiles_written, tile_percent, scale);
+            int32_t total_progress = ((*total_tiles_written + tile_progress) * 100) / total_tiles;
+
+            // Calculate ETA
+            clock_t current_time = clock();
+            double elapsed_time = (double) (current_time - start_time) / CLOCKS_PER_SEC;
+            double avg_time_per_tile = elapsed_time / tile_progress;
+            double eta = avg_time_per_tile * (tiles_in_page - tile_progress);
+
+
+            update_progress(total_progress, tile_percent, scale, eta);
 
             libisyntax_tile_free_pixels(pixels);
         }
@@ -85,16 +101,66 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
     TIFFWriteDirectory(output_tiff);
 }
 
+int parse_cache_size(const char *size_str) {
+    int size;
+    char unit;
+
+    if (sscanf(size_str, "%d%c", &size, &unit) == 2) {
+        if (unit == 'M') {
+            size *= 1024 * 1024;
+        } else if (unit == 'G') {
+            size *= 1024 * 1024 * 1024;
+        } else {
+            printf("Error: Invalid unit for cache size. Use 'M' for megabytes or 'G' for gigabytes.\n");
+            return -1;
+        }
+    } else if (sscanf(size_str, "%d", &size) != 1) {
+        printf("Error: Invalid cache size format.\n");
+        return -1;
+    }
+
+    return size;
+}
 
 
 int main(int argc, char **argv) {
-    if (argc <= 2) {
-        printf("Usage: %s <isyntax_file> <output.tif> - convert iSyntax file to a pyramidal BigTIFF\n", argv[0]);
-        return 0;
-    }
-
     char *filename = argv[1];
     char *output_tiffname = argv[2];
+
+    int64_t cache_size = 2000;
+    int32_t tile_size = 1024;
+
+    for (int i = 3; i < argc; ++i) {
+        if (strcmp(argv[i], "--tile-size") == 0) {
+            if (i + 1 < argc) {
+                tile_size = atoi(argv[i + 1]);
+                if (tile_size <= 0) {
+                    printf("Error: Invalid tile size. Please provide a positive integer value for the tile size.\n");
+                    return -1;
+                }
+                i++; // Skip the next argument (tile size value)
+            } else {
+                printf("Error: Missing value for --tile-size option.\n");
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--cache-size") == 0) {
+            if (i + 1 < argc) {
+                cache_size = parse_cache_size(argv[i + 1]);
+                if (cache_size < 0) {
+                    return -1;
+                }
+                i++; // Skip the next argument (cache size value)
+            } else {
+                printf("Error: Missing value for --cache-size option.\n");
+                return -1;
+            }
+        } else {
+            printf("Error: Unknown option %s\n", argv[i]);
+            return -1;
+        }
+    }
+    int32_t tile_width = tile_size;
+    int32_t tile_height = tile_size;
 
     libisyntax_init();
 
@@ -105,13 +171,13 @@ int main(int argc, char **argv) {
     }
     printf("Successfully opened %s\n", filename);
 
-    int32_t tile_width = libisyntax_get_tile_width(isyntax);
-    int32_t tile_height = libisyntax_get_tile_height(isyntax);
-    LOG_VAR("%d", tile_width);
-    LOG_VAR("%d", tile_height);
+    int32_t internal_tile_width = libisyntax_get_tile_width(isyntax);
+    int32_t internal_tile_height = libisyntax_get_tile_height(isyntax);
+    LOG_VAR("%d", internal_tile_width);
+    LOG_VAR("%d", internal_tile_height);
 
     isyntax_cache_t *isyntax_cache = NULL;
-    assert(libisyntax_cache_create("example cache", 2000, &isyntax_cache) == LIBISYNTAX_OK);
+    assert(libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) == LIBISYNTAX_OK);
     assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
 
     // Initialize the output TIFF file.
@@ -121,12 +187,9 @@ int main(int argc, char **argv) {
         printf("Failed to create %s\n", output_tiffname);
         return -1;
     }
-    // TODO: Tile size != 256, 256
-    tile_width = 1024;
-    tile_height = 1024;
 
     // Write all levels to the output TIFF.
-    int start_at_page = 3;
+    int start_at_page = 0;
 
     const isyntax_image_t *image = libisyntax_get_image(isyntax, 0);
     int32_t num_levels = libisyntax_image_get_level_count(image);
@@ -134,7 +197,7 @@ int main(int argc, char **argv) {
 
     // Let's find the total number of tiles so we can have a progress counter
     for (int32_t level = start_at_page; level < num_levels; ++level) {
-        isyntax_level_t* current_level = libisyntax_image_get_level(image, level);
+        isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
         int32_t width = libisyntax_level_get_width(current_level);
         int32_t height = libisyntax_level_get_height(current_level);
         int32_t tiles_in_page = ((height - 1) / tile_height) * ((width - 1) / tile_width) + 2;
@@ -143,17 +206,9 @@ int main(int argc, char **argv) {
 
     int32_t total_tiles_written = 0;
     for (int32_t level = start_at_page; level < num_levels; ++level) {
-        isyntax_level_t* current_level = libisyntax_image_get_level(image, level);
-        int32_t width = libisyntax_level_get_width(current_level);
-        int32_t height = libisyntax_level_get_height(current_level);
-        int32_t tiles_in_page = (height / tile_height) * (width / tile_width);
-
-        write_page_to_tiff(output_tiff, isyntax, isyntax_cache, current_level, tile_width, tile_height, total_tiles_written);
-
-        total_tiles_written += tiles_in_page;
-        int32_t total_progress = (total_tiles_written * 100) / total_tiles;
-        int32_t page_progress = (total_tiles_written * 100) / tiles_in_page;
-        update_progress(total_progress, 0, level); // Reset tile progress to 0
+        isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
+        write_page_to_tiff(output_tiff, isyntax, isyntax_cache, current_level, tile_width, tile_height,
+                           &total_tiles_written, total_tiles);
     }
 
     // Close the output TIFF file.

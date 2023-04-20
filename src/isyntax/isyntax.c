@@ -2973,8 +2973,14 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 						// (I guess this is related to the way the wavelet transform works.)
 						// Put another way: the highest (zoomed out levels) are shifted the to the bottom right
 						// (this is also reflected in the x and y coordinates of the codeblocks in the iSyntax header).
-						for (i32 scale = 1; scale < wsi_image->level_count; ++scale) {
-							isyntax_level_t* level = wsi_image->levels + scale;
+                        // TODO(jt): Not sure why the below counter starts at 1. Is there no offset in the first page??
+                        // Anyway, we need the width here.
+                        isyntax_level_t* level = wsi_image->levels + 0;
+                        level->width = wsi_image->width;
+                        level->height = wsi_image->height;
+
+                        for (i32 scale = 1; scale < wsi_image->level_count; ++scale) {
+							level += scale;
                             level->origin_offset_in_pixels = ((PER_LEVEL_PADDING << wsi_image->level_count) - PER_LEVEL_PADDING) >> scale;
                             level->width = wsi_image->width >> scale;
                             level->height = wsi_image->height >> scale;
