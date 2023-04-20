@@ -254,7 +254,7 @@ int main(int argc, char **argv) {
 
     isyntax_cache_t *isyntax_cache = NULL;
     if (libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) != LIBISYNTAX_OK) {
-        fprintf(stderr, "Failed to create iSyntax cache with size %" PRId64 ".\n", cache_size);
+        fprintf(stderr, "Failed to create iSyntax cache with size %llu.\n", cache_size);
         libisyntax_close(isyntax);
         return -1;
     }
