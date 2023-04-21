@@ -55,3 +55,47 @@ if (WIN32)
 else()
 
 endif()
+
+# TODO(avirodov): Consider moving testing to its own test/CMakeLists. This will require moving the library building
+#   to src/CMakeLists to avoid circular deps.
+
+# Note: checking if running in test mode to avoid downloading a large test file for regular builds.
+option(BUILD_TESTING "Build tests" OFF)
+message(STATUS "BUILD_TESTING = ${BUILD_TESTING}")
+if(BUILD_TESTING)
+    include(CTest)
+    add_test(NAME smoke_example_runs_no_args
+            COMMAND isyntax_example)
+
+    # Thank you https://gitlab.com/BioimageInformaticsGroup/openphi
+    if (NOT EXISTS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/testslide.isyntax)
+        file(DOWNLOAD https://zenodo.org/record/5037046/files/testslide.isyntax?download=1 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/testslide.isyntax SHOW_PROGRESS)
+    else()
+        message(STATUS "Found test slide (no need to download): ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/testslide.isyntax")
+    endif()
+
+    # Test that we can show levels and that number of tiles shown is as expected for this test tile.
+    add_test(NAME smoke_example_runs_with_test_slide_showing_levels
+            COMMAND isyntax_example ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/testslide.isyntax)
+    set_tests_properties(smoke_example_runs_with_test_slide_showing_levels
+            PROPERTIES PASS_REGULAR_EXPRESSION "width.*=256")
+    set_tests_properties(smoke_example_runs_with_test_slide_showing_levels
+            PROPERTIES PASS_REGULAR_EXPRESSION "height.*=384")
+
+    # Test that we can produce a tile png.
+    add_test(NAME smoke_example_runs_with_test_slide_producing_output
+            COMMAND isyntax_example ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/testslide.isyntax 3 5 10 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/output_smoke_example_runs_with_test_slide_producing_output.png)
+
+    # Test that the tile png was indeed produced.
+    add_test(NAME smoke_example_runs_with_test_slide_produced_output
+            COMMAND ${CMAKE_COMMAND} -E cat ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/output_smoke_example_runs_with_test_slide_producing_output.png)
+    set_tests_properties(smoke_example_runs_with_test_slide_produced_output PROPERTIES DEPENDS smoke_example_runs_with_test_slide_producing_output)
+
+    # Regression test that the produced tile pixels did not change from expected.
+    add_test(NAME regression_example_tile_3_5_10_pixel_check
+            COMMAND ${CMAKE_COMMAND} -E compare_files ../test/expected_output/testslide_example_tile_3_5_10.png ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/output_smoke_example_runs_with_test_slide_producing_output.png)
+    set_tests_properties(regression_example_tile_3_5_10_pixel_check PROPERTIES DEPENDS smoke_example_runs_with_test_slide_producing_output)
+
+endif() # if(BUILD_TESTING)
+
+

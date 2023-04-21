@@ -82,6 +82,7 @@ _Noreturn DWORD WINAPI thread_proc(void* parameter) {
 static void init_thread_pool() {
 	init_thread_memory(0, &global_system_info);
 
+    int total_thread_count = global_system_info.suggested_total_thread_count;
 	global_worker_thread_count = total_thread_count - 1;
 	global_active_worker_thread_count = global_worker_thread_count;
 
