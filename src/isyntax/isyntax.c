@@ -2722,25 +2722,6 @@ void isyntax_set_work_queue(isyntax_t* isyntax, work_queue_t* work_queue) {
 }
 
 
-static void isyntax_init_level_offsets(isyntax_image_t* wsi_image) {
-	// When recursively decoding the tiles, at each iteration the image is slightly offset
-	// to the top left.
-	// The amount of shift seems correspond to the level padding: ((3 >> (scale-1)) - 2).
-	// (I guess this is related to the way the wavelet transform works.)
-	// Put another way: the highest (zoomed out levels) are shifted the to the bottom right
-	// (this is also reflected in the x and y coordinates of the codeblocks in the iSyntax header).
-	for (i32 scale = 1; scale < wsi_image->level_count; ++scale) {
-		isyntax_level_t* level = wsi_image->levels + scale;
-		level->origin_offset_in_pixels = get_first_valid_coef_pixel(scale - 1);
-		level->width_in_pixels = wsi_image->width >> scale;
-		level->height_in_pixels = wsi_image->height >> scale;
-		float offset_in_um_x = (float)level->origin_offset_in_pixels * wsi_image->levels[0].um_per_pixel_x;
-		float offset_in_um_y = (float)level->origin_offset_in_pixels * wsi_image->levels[0].um_per_pixel_y;
-		level->origin_offset = (v2f){offset_in_um_x, offset_in_um_y};
-	}
-}
-
-
 bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators) {
 
 	console_print_verbose("Attempting to open iSyntax: %s\n", filename);
@@ -2877,31 +2858,49 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 			isyntax_image_t* wsi_image = isyntax->images + isyntax->wsi_image_index;
 			if (wsi_image->image_type == ISYNTAX_IMAGE_TYPE_WSI) {
 
-				i64 block_width = isyntax->block_width;
-				i64 block_height = isyntax->block_height;
-				i64 tile_width = isyntax->tile_width;
-				i64 tile_height = isyntax->tile_height;
+				i32 block_width = isyntax->block_width;
+				i32 block_height = isyntax->block_height;
+				i32 tile_width = isyntax->tile_width;
+				i32 tile_height = isyntax->tile_height;
 
-				i64 num_levels = wsi_image->level_count;
+				i32 num_levels = wsi_image->level_count;
 				ASSERT(num_levels >= 1);
-				i64 grid_width = ((wsi_image->width + (block_width << num_levels) - 1) / (block_width << num_levels)) << (num_levels - 1);
-				i64 grid_height = ((wsi_image->height + (block_height << num_levels) - 1) / (block_height << num_levels)) << (num_levels - 1);
+				i32 grid_width = ((wsi_image->width + (block_width << num_levels) - 1) / (block_width << num_levels)) << (num_levels - 1);
+				i32 grid_height = ((wsi_image->height + (block_height << num_levels) - 1) / (block_height << num_levels)) << (num_levels - 1);
 
-				i64 h_coeff_tile_count = 0; // number of tiles with LH/HL/HH coefficients
-				i64 base_level_tile_count = grid_height * grid_width;
-				for (i32 i = 0; i < wsi_image->level_count; ++i) {
-					isyntax_level_t* level = wsi_image->levels + i;
-					level->tile_count = base_level_tile_count >> (i * 2);
+				u64 h_coeff_tile_count = 0; // number of tiles with LH/HL/HH coefficients
+				i32 base_level_tile_count = grid_height * grid_width;
+				for (i32 scale = 0; scale < wsi_image->level_count; ++scale) {
+					isyntax_level_t* level = wsi_image->levels + scale;
+					level->tile_count = base_level_tile_count >> (scale * 2);
 					h_coeff_tile_count += level->tile_count;
-					level->scale = i;
-					level->width_in_tiles = grid_width >> i;
-					level->height_in_tiles = grid_height >> i;
-					level->downsample_factor = (float)(1 << i);
+					level->scale = scale;
+					level->width_in_tiles = grid_width >> scale;
+					level->height_in_tiles = grid_height >> scale;
+					level->width_in_pixels = wsi_image->width >> scale;
+					level->height_in_pixels = wsi_image->height >> scale;
+					level->downsample_factor = (float)(1 << scale);
 					level->um_per_pixel_x = isyntax->mpp_x * level->downsample_factor;
 					level->um_per_pixel_y = isyntax->mpp_y * level->downsample_factor;
-					level->x_tile_side_in_um = tile_width * level->um_per_pixel_x;
-					level->y_tile_side_in_um = tile_height * level->um_per_pixel_y;
+					level->x_tile_side_in_um = (float)tile_width * level->um_per_pixel_x;
+					level->y_tile_side_in_um = (float)tile_height * level->um_per_pixel_y;
 				}
+
+				// When recursively decoding the tiles, at each iteration the image is slightly offset
+				// to the top left.
+				// The shift corresponds to the per level padding added for the wavelet transform:
+				// ((3 << (scale-1)) - 2)
+				// Put another way: the highest (zoomed out levels) are shifted the to the bottom right
+				// (this is also reflected in the x and y coordinates of the codeblocks in the iSyntax header).
+				// Level 0 has no
+				for (i32 scale = 1; scale < wsi_image->level_count; ++scale) {
+					isyntax_level_t* level = wsi_image->levels + scale;
+					level->origin_offset_in_pixels = get_first_valid_coef_pixel(scale - 1);
+					float offset_in_um_x = (float)level->origin_offset_in_pixels * wsi_image->levels[0].um_per_pixel_x;
+					float offset_in_um_y = (float)level->origin_offset_in_pixels * wsi_image->levels[0].um_per_pixel_y;
+					level->origin_offset = (v2f){offset_in_um_x, offset_in_um_y};
+				}
+
 				// The highest level has LL tiles in addition to LH/HL/HH tiles
 				i64 ll_coeff_tile_count = base_level_tile_count >> ((num_levels - 1) * 2);
 				i64 total_coeff_tile_count = h_coeff_tile_count + ll_coeff_tile_count;
@@ -3084,8 +3083,6 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 
 						}
 
-						isyntax_init_level_offsets(wsi_image);
-
 						parse_ticks_elapsed += (get_clock() - parse_begin);
 //						console_print("iSyntax: the seektable is %u bytes, or %g%% of the total file size\n", seektable_size, (float)((float)seektable_size * 100.0f) / isyntax->filesize);
 //						console_print("   I/O time: %g seconds\n", get_seconds_elapsed(0, io_ticks_elapsed));
@@ -3154,8 +3151,6 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 						level->tiles[tile_index].data_chunk_index = current_data_chunk_index;
 
 					}
-
-					isyntax_init_level_offsets(wsi_image);
 
 					parse_ticks_elapsed += (get_clock() - parse_begin);
 //				    console_print("iSyntax: the seektable is %u bytes, or %g%% of the total file size\n", seektable_size, (float)((float)seektable_size * 100.0f) / isyntax->filesize);
