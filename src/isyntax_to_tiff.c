@@ -335,7 +335,7 @@ int main(int argc, char **argv) {
     }
 
     // Write all levels to the output TIFF.
-    int start_at_page = 1;
+    int start_at_page = 0;
 
     const isyntax_image_t *image = libisyntax_get_image(isyntax, 0);
     int32_t num_levels = libisyntax_image_get_level_count(image);
