@@ -327,6 +327,7 @@ void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, in
                        uint32_t* pixels_buffer, enum isyntax_pixel_format_t pixel_format) {
     // TODO(avirodov): more granular locking (some notes below). This will require handling overlapping work, that is
     //  thread A needing tile 123 and started to load it, and thread B needing same tile 123 and needs to wait for A.
+    // TODO(pvalkema): Can we safely lock the mutex later, after checking if the tile exists?
     benaphore_lock(&cache->mutex);
 
     isyntax_image_t* wsi = &isyntax->images[isyntax->wsi_image_index];

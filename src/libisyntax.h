@@ -79,5 +79,8 @@ void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
                                      int32_t level, int64_t tile_x, int64_t tile_y,
                                      uint32_t* pixels_buffer, int32_t pixel_format);
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t* pixels_buffer,
+                                       int32_t pixel_format);
 
 

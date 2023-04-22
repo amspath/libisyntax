@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD 17)
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
+
 message(STATUS "CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*|arm64.*|ARM64.*)")
@@ -86,6 +87,19 @@ endif()
 
 add_executable(isyntax_example src/isyntax_example.c)
 target_link_libraries(isyntax_example libisyntax)
+
+# Find LibTIFF library
+find_package(TIFF REQUIRED)
+if (NOT TIFF_FOUND)
+    message(WARNING "LibTIFF not found")
+    message(WARNING "Will not compile `isyntax-to-tiff` utility")
+else()
+    include_directories(${TIFF_INCLUDE_DIR})
+    add_executable(isyntax-to-tiff
+            src/isyntax_to_tiff.c
+            ${LIBISYNTAX_COMMON_SOURCE_FILES} ${TIFF_LIBRARIES})
+target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES})
+endif()
 
 # TODO(avirodov): Consider moving testing to its own test/CMakeLists. This will require moving the library building
 #   to src/CMakeLists to avoid circular deps.

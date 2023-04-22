@@ -38,6 +38,12 @@
 #include "libisyntax.h"
 #include "isyntax.h"
 #include "isyntax_reader.h"
+#include <math.h>
+
+#define CHECK_LIBISYNTAX_OK(_libisyntax_call) do { \
+    isyntax_error_t result = _libisyntax_call;     \
+    assert(result == LIBISYNTAX_OK);               \
+} while(0);
 
 static platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
 
@@ -310,8 +316,8 @@ isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_
 
     if (!isyntax_cache->h_coeff_block_allocator.is_valid || !isyntax_cache->ll_coeff_block_allocator.is_valid) {
         // Shouldn't ever partially initialize.
-        assert(!isyntax_cache->h_coeff_block_allocator.is_valid);
-        assert(!isyntax_cache->ll_coeff_block_allocator.is_valid);
+        ASSERT(!isyntax_cache->h_coeff_block_allocator.is_valid);
+        ASSERT(!isyntax_cache->ll_coeff_block_allocator.is_valid);
 
         isyntax_cache->allocator_block_width = isyntax->block_width;
         isyntax_cache->allocator_block_height = isyntax->block_height;
@@ -346,6 +352,8 @@ void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
     free(isyntax_cache);
 }
 
+// TODO(pvalkema): should we allow passing a stride for the pixels_buffer, to allow blitting into buffers
+//  that are not exactly the height/width of the region?
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
                                      int32_t level, int64_t tile_x, int64_t tile_y,
                                      uint32_t* pixels_buffer, int32_t pixel_format) {
@@ -357,5 +365,66 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
     // TODO(avirodov): if isyntax_cache is null, we can support using allocators that are in isyntax object,
     //  if is_init_allocators = 1 when created. Not sure is needed.
     isyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, pixels_buffer, pixel_format);
+    return LIBISYNTAX_OK;
+}
+
+#define PER_LEVEL_PADDING 3
+
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t* pixels_buffer,
+                                       int32_t pixel_format) {
+
+    // Get the level
+    ASSERT(level < isyntax->images[0].level_count);
+    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
+
+    // TODO(pvalkema): check if this still needs adjustment
+    int32_t num_levels = isyntax->images[0].level_count;
+    int32_t offset = ((PER_LEVEL_PADDING << num_levels) - PER_LEVEL_PADDING) >> level;
+
+    x += offset;
+    y += offset;
+
+    int32_t tile_width = isyntax->tile_width;
+    int32_t tile_height = isyntax->tile_height;
+
+    int64_t start_tile_x = x / tile_width;
+    int64_t end_tile_x = (x + width - 1) / tile_width;
+    int64_t start_tile_y = y / tile_height;
+    int64_t end_tile_y = (y + height - 1) / tile_height;
+
+    // Allocate memory for tile pixels (will reuse for consecutive libisyntax_tile_read() calls)
+    uint32_t* tile_pixels = (uint32_t*)malloc(tile_width * tile_height * sizeof(uint32_t));
+
+    // Read tiles and copy the relevant portion of each tile to the region
+    for (int64_t tile_y = start_tile_y; tile_y <= end_tile_y; ++tile_y) {
+        for (int64_t tile_x = start_tile_x; tile_x <= end_tile_x; ++tile_x) {
+            // Calculate the portion of the tile to be copied
+            int64_t src_x = (tile_x == start_tile_x) ? x % tile_width : 0;
+            int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
+            int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - (x % tile_width);
+            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height - (y % tile_height);
+            int64_t copy_width = (tile_x == end_tile_x) ? (x + width - 1) % tile_width - src_x + 1 : tile_width - src_x;
+            int64_t copy_height = (tile_y == end_tile_y) ? (y + height - 1) % tile_height - src_y + 1 : tile_height - src_y;
+
+            // Read tile
+            // TODO(pvalkema): be rob
+            ASSERT(tile_x < current_level->width_in_tiles);
+            ASSERT(tile_y < current_level->height_in_tiles);
+            CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, tile_pixels, pixel_format));
+
+            // Copy the relevant portion of the tile to the region
+            for (int64_t i = 0; i < copy_height; ++i) {
+                int64_t dest_index = (dest_y + i) * width + dest_x;
+                int64_t src_index = (src_y + i) * tile_width + src_x;
+                memcpy((pixels_buffer) + dest_index,
+                       tile_pixels + src_index,
+                       copy_width * sizeof(uint32_t));
+            }
+        }
+    }
+
+    free(tile_pixels);
+
     return LIBISYNTAX_OK;
 }
