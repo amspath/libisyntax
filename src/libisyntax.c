@@ -310,6 +310,77 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
     return LIBISYNTAX_OK;
 }
 
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
+
+    // Get the level
+    assert(level < libisyntax_image_get_level_count(isyntax));
+    isyntax_level_t* current_level = &isyntax->images[0].levels + level;
+
+    // Setup the origin offset
+    int32_t offset = current_level->origin_offset_in_pixels;
+    x += offset;
+    y += offset;
+
+    // Check bounds
+    assert(x + width - offset <= current_level->width_in_pixels);
+    assert(y + height - offset <= current_level->height_in_pixels);
+
+    int32_t tile_width = isyntax->tile_width;
+    int32_t tile_height = isyntax->tile_height;
+
+    int64_t start_tile_x = x / tile_width;
+    int64_t end_tile_x = (x + width - 1) / tile_width;
+    int64_t start_tile_y = y / tile_height;
+    int64_t end_tile_y = (y + height - 1) / tile_height;
+
+    // Allocate memory for region
+    *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
+
+    // Read tiles and copy the relevant portion of each tile to the region
+    for (int64_t tile_y = start_tile_y; tile_y <= end_tile_y; ++tile_y) {
+        for (int64_t tile_x = start_tile_x; tile_x <= end_tile_x; ++tile_x) {
+            // Calculate the portion of the tile to be copied
+            int64_t src_x = (tile_x == start_tile_x) ? x % tile_width : 0;
+            int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
+            int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - (x % tile_width);
+            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height -
+                                                            (y % tile_height);
+            int64_t copy_width = (tile_x == end_tile_x) ? (x + width) % tile_width : tile_width - src_x;
+            int64_t copy_height = (tile_y == end_tile_y) ? (y + height) % tile_height : tile_height - src_y;
+
+            uint32_t *pixels = NULL;
+
+            // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
+            // tile.
+            int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
+            bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
+            if (tile_exists) {
+                // Read tile
+                assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
+                // Copy the relevant portion of the tile to the region
+                for (int64_t i = 0; i < copy_height; ++i) {
+                    memcpy((*out_pixels) + (dest_y + i) * width + dest_x,
+                           pixels + (src_y + i) * tile_width + src_x,
+                           copy_width * sizeof(uint32_t));
+                }
+            } else {
+                // Fill up with transparent white pixels (R=255, G=255, B=255, A=0)
+                for (int64_t i = 0; i < copy_height; ++i) {
+                    for (int64_t j = 0; j < copy_width; ++j) {
+                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0x00FFFFFFu;
+                    }
+                }
+            }
+
+            // Free the tile data
+            free(pixels);
+        }
+    }
+
+    return LIBISYNTAX_OK;
+}
+
 void libisyntax_tile_free_pixels(uint32_t* pixels) {
     free(pixels);
 }

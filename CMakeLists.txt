@@ -49,6 +49,20 @@ add_executable(isyntax_example
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
 
+# Find LibTIFF library
+find_package(TIFF REQUIRED)
+if (NOT TIFF_FOUND)
+    message(WARNING "LibTIFF not found")
+    message(WARNING "Will not compile `isyntax-to-tiff` utility")
+else()
+    include_directories(${TIFF_INCLUDE_DIR})
+    add_executable(isyntax-to-tiff
+            src/isyntax_to_tiff.c
+            ${LIBISYNTAX_COMMON_SOURCE_FILES} ${TIFF_LIBRARIES} src/isyntax_to_tiff.c)
+    target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES})
+endif()
+
+
 if (WIN32)
     target_link_libraries(libisyntax winmm)
     target_link_libraries(isyntax_example winmm)
