@@ -133,6 +133,7 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
             uint32_t *tile_pixels = pixels;
 
+            // In case our actual tile is smaller, we need to convert it to a full tile.
             if (region_width != tile_width || region_height != tile_height) {
                 tile_pixels = calloc(tile_width * tile_height, sizeof(uint32_t));
                 for (int32_t row = 0; row < region_height; ++row) {
@@ -334,7 +335,7 @@ int main(int argc, char **argv) {
     }
 
     // Write all levels to the output TIFF.
-    int start_at_page = 0;
+    int start_at_page = 1;
 
     const isyntax_image_t *image = libisyntax_get_image(isyntax, 0);
     int32_t num_levels = libisyntax_image_get_level_count(image);

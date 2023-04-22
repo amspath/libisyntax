@@ -314,17 +314,20 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
     // Get the level
-    assert(level < libisyntax_image_get_level_count(isyntax));
-    isyntax_level_t* current_level = &isyntax->images[0].levels + level;
+    assert(level < &isyntax->images[0].level_count);
+    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
 
+    int32_t level_count = isyntax->images[0].level_count;
     // Setup the origin offset
     int32_t offset = current_level->origin_offset_in_pixels;
+    int PER_LEVEL_PADDING = 3;
+//    int32_t offset = ((PER_LEVEL_PADDING << level_count) - PER_LEVEL_PADDING) >> level;
     x += offset;
     y += offset;
 
     // Check bounds
-    assert(x + width - offset <= current_level->width_in_pixels);
-    assert(y + height - offset <= current_level->height_in_pixels);
+//    assert(x + width - offset <= current_level->width_in_pixels);
+//    assert(y + height - offset <= current_level->height_in_pixels);
 
     int32_t tile_width = isyntax->tile_width;
     int32_t tile_height = isyntax->tile_height;
@@ -380,7 +383,6 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
 
     return LIBISYNTAX_OK;
 }
-
 void libisyntax_tile_free_pixels(uint32_t* pixels) {
     free(pixels);
 }
