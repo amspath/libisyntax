@@ -312,7 +312,6 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
     return LIBISYNTAX_OK;
 }
 
-
 isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
@@ -372,7 +371,7 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
     }
     return LIBISYNTAX_OK;
 }
-//
+
 void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, float x, float y, float crop_width, float crop_height, int output_width, int output_height) {
     // Create source Pixman image from input BGRA array
     pixman_image_t *src_image = pixman_image_create_bits(PIXMAN_b8g8r8a8, src_width, src_height, src, src_width * 4);
@@ -401,16 +400,12 @@ void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, flo
     pixman_image_unref(dst_image);
 }
 
-
-
-
 isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
     isyntax_error_t error;
     isyntax_level_t* current_level = &isyntax->images[0].levels[level];
 
-    float offset = current_level->origin_offset.x;
-    assert(offset == current_level->origin_offset.y);
+    float offset = current_level->origin_offset_in_pixels;
 
     float x_float = (float)x + offset;
     float y_float = (float)y + offset;
