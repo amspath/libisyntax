@@ -70,15 +70,23 @@ int main(int argc, char** argv) {
         assert(libisyntax_cache_create("example cache", 2000, &isyntax_cache) == LIBISYNTAX_OK);
         assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
 
+        LOG_VAR("%d", tile_x);
+        LOG_VAR("%d", tile_y);
+
         uint32_t *pixels = NULL;
-        assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
+
+        int offset = 0;
+        // (padding_var x 2^number_of_levels) - padding_var
+        // 3 * 2^9 - 3 = 1533
+        // level 1: 1533 / 2 = 717.5
+        assert(libisyntax_read_region(isyntax, isyntax_cache, level, offset, offset, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
 
         // convert data to the correct pixel format (bgra->rgba).
         for (int i = 0; i < tile_height * tile_width; ++i) {
             pixels[i] = bgra_to_rgba(pixels[i]);
         }
         printf("Writing %s...\n", output_png);
-        stbi_write_png(output_png, tile_width, tile_height, 4, pixels, tile_width * 4);
+        stbi_write_png(output_png, tile_x, tile_y, 4, pixels, tile_x * 4);
         printf("Done writing %s.\n", output_png);
 
         libisyntax_tile_free_pixels(pixels);

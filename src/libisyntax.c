@@ -377,7 +377,7 @@ void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, flo
     pixman_image_t *src_image = pixman_image_create_bits(PIXMAN_b8g8r8a8, src_width, src_height, src, src_width * 4);
 
     // Create destination Pixman image to hold the cropped region
-    pixman_image_t *dst_image = pixman_image_create_bits(PIXMAN_b8g8r8a8, output_width, output_height, NULL, output_width * 4);
+    pixman_image_t *dst_image = pixman_image_create_bits(PIXMAN_b8g8r8a8, output_width, output_height, dst, output_width * 4);
 
     // Set transformation matrix to translate and scale the source image
     pixman_transform_t transform;
@@ -387,7 +387,7 @@ void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, flo
     pixman_image_set_transform(src_image, &transform);
 
     // Set bilinear filter for interpolation
-    pixman_image_set_filter(src_image, PIXMAN_FILTER_BILINEAR, NULL, 0);
+    pixman_image_set_filter(src_image, PIXMAN_FILTER_BEST, NULL, 0);
 
     // Composite the source image with the destination image using the transformation matrix
     pixman_image_composite32(PIXMAN_OP_SRC, src_image, NULL, dst_image, 0, 0, 0, 0, 0, 0, output_width, output_height);
@@ -400,7 +400,7 @@ void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, flo
     pixman_image_unref(dst_image);
 }
 
-isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+isyntax_error_t libisyntax_read_region_old(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
     isyntax_error_t error;
     isyntax_level_t* current_level = &isyntax->images[0].levels[level];
@@ -440,6 +440,54 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
 
 
     return LIBISYNTAX_OK;
+}
+
+
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
+    isyntax_error_t error;
+    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
+
+    int32_t PER_LEVEL_PADDING = 3;
+    float offset = (float)((PER_LEVEL_PADDING << isyntax->images[0].level_count) - PER_LEVEL_PADDING) / current_level->downsample_factor;
+
+    // -1.5 seems to work. TODO(jt): Why??
+    offset -= 1.5f;
+
+    float x_float = (float)x + offset;
+    float y_float = (float)y + offset;
+
+    int64_t larger_x = (int64_t)floor(x_float);
+    int64_t larger_y = (int64_t)floor(y_float);
+
+    // Check if x_float and y_float are integers (their fractional parts are zero)
+    if (x_float == (float)larger_x && y_float == (float)larger_y) {
+        // Read the original shape directly without cropping
+        error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, (int64_t)x_float, (int64_t)y_float, width, height, out_pixels);
+    } else {
+        // Width only needs to be 1 larger for the interpolation
+        int64_t larger_width = width + 1;
+        int64_t larger_height = height + 1;
+
+        // Extract the larger region
+        uint32_t* larger_region_pixels = NULL;
+        error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, larger_x, larger_y, larger_width, larger_height, &larger_region_pixels);
+
+        if (error != LIBISYNTAX_OK) {
+            return error;
+        }
+
+        // Allocate memory for the final output region
+        *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
+
+        // Crop the larger region to the desired region using the crop_image function
+        crop_image(larger_region_pixels, *out_pixels, larger_width, larger_height, x_float - larger_x, y_float - larger_y, (float)width, (float)height, width, height);
+
+        // Free the memory allocated for the larger region
+        free(larger_region_pixels);
+    }
+
+    return error;
 }
 
 
