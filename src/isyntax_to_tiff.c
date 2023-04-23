@@ -72,7 +72,7 @@ void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height) {
 }
 
 void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *isyntax_cache, isyntax_level_t *level,
-                        int32_t tile_width, int32_t tile_height, int32_t *total_tiles_written, int32_t total_tiles,
+                        int32_t tile_width, int32_t tile_height, const int32_t *total_tiles_written, int32_t total_tiles,
                         clock_t global_start_time, uint16_t compression_type, uint16_t quality) {
     int32_t width = libisyntax_level_get_width(level);
     int32_t height = libisyntax_level_get_height(level);
@@ -321,13 +321,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Check if the page we selected actually exists.
-    int32_t level_count = libisyntax_image_get_level_count(isyntax);
-    if (start_at_page >= level_count) {
-        fprintf(stderr, "Error: The page number %d is out of range. The image only has %d pages. Set --start-at-page to a smaller value.\n", start_at_page, level_count);
-        libisyntax_close(isyntax);
-        return -1;
-    }
 
     isyntax_cache_t *isyntax_cache = NULL;
     if (libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) != LIBISYNTAX_OK) {
@@ -351,6 +344,17 @@ int main(int argc, char **argv) {
     }
 
     const isyntax_image_t *image = libisyntax_get_image(isyntax, 0);
+
+    // Check if the page we selected actually exists.
+    int32_t level_count = libisyntax_image_get_level_count(image);
+    if (start_at_page >= level_count) {
+        fprintf(stderr, "Error: The page number %d is out of range. The image only has %d pages. Set --start-at-page to a smaller value.\n", start_at_page, level_count);
+        libisyntax_cache_destroy(isyntax_cache);
+        libisyntax_close(isyntax);
+        TIFFClose(output_tiff);
+        return -1;
+    }
+
     int32_t num_levels = libisyntax_image_get_level_count(image);
     int32_t total_tiles = 0;
 

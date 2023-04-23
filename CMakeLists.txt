@@ -19,6 +19,7 @@ message(STATUS "CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|aarch64)")
     message(STATUS "Enabling ARM NEON support")
     add_compile_options(-mfpu=neon)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -mfloat-abi=softfp -mfpu=neon -ftree-vectorize")
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
