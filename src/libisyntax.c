@@ -405,7 +405,11 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     isyntax_error_t error;
     isyntax_level_t* current_level = &isyntax->images[0].levels[level];
 
-    float offset = current_level->origin_offset_in_pixels;
+    int32_t PER_LEVEL_PADDING = 3;
+    float offset = (float)((PER_LEVEL_PADDING << isyntax->images[0].level_count) - PER_LEVEL_PADDING) / current_level->downsample_factor;
+
+    // -0.5 seems to improve it a bit
+    // offset -= 1.0f;
 
     float x_float = (float)x + offset;
     float y_float = (float)y + offset;
