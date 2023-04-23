@@ -28,14 +28,10 @@
      #include <spe.h>
 #endif
 
-#define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
-
 void update_progress(int32_t total_progress, int32_t page_progress, int32_t page_number, double eta) {
     printf("\rProgress: %3d%% | Page %d progress: %3d%% | ETA: %.0fs", total_progress, page_number, page_progress, eta);
     fflush(stdout);
 }
-
-
 
 void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height) {
     int num_pixels = tile_width * tile_height;
@@ -197,11 +193,13 @@ uint64_t parse_cache_size(const char *size_str) {
 int main(int argc, char **argv) {
     const char *usage_string =
             "Usage: isyntax-to-tiff [OPTIONS] INPUT OUTPUT\n\n"
-            "Converts Philips iSyntax files to multi-resolution TIFF files.\n\n"
+            "Converts Philips iSyntax files to a multi-resolution BigTIFF file.\n\n"
             "Positional arguments:\n"
             "  INPUT                 Path to the input iSyntax file.\n"
             "  OUTPUT                Path to the output TIFF file.\n\n"
             "Options:\n"
+            "  --help                Show this help message and exit.\n\n"
+            "  --start-at-page PAGE  Specifies the page to start at (default: 0).\n"
             "  --tile-size SIZE      Specifies the tile size for the output TIFF (default: 1024).\n"
             "                        Must be a positive integer.\n\n"
             "  --compression TYPE    Specifies the compression type for the output TIFF.\n"
@@ -226,6 +224,7 @@ int main(int argc, char **argv) {
 
     uint64_t cache_size = 2000;
     int32_t tile_size = 1024;
+    int start_at_page = 0;
 
     int compression_type = COMPRESSION_JPEG;
     int quality = 80;
@@ -275,6 +274,21 @@ int main(int argc, char **argv) {
                 printf("Error: Missing value for --quality option.\n");
                 return -1;
             }
+        } else if (strcmp(argv[i], "--help") == 0) {
+            printf("%s", usage_string);
+            return 0;
+        } else if (strcmp(argv[i], "--start-at-page") == 0) {
+            if (i + 1 < argc) {
+                start_at_page = atoi(argv[i + 1]);
+                if (start_at_page < 0) {
+                    printf("Error: Invalid page number. Please provide a positive integer value for the page number.\n");
+                    return -1;
+                }
+                i++; // Skip the next argument (page number value)
+            } else {
+                printf("Error: Missing value for --start-at-page option.\n");
+                return -1;
+            }
         } else if (strcmp(argv[i], "--cache-size") == 0) {
             if (i + 1 < argc) {
                 cache_size = parse_cache_size(argv[i + 1]);
@@ -304,14 +318,16 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // Check if the page we selected actually exists.
+    int32_t level_count = libisyntax_image_get_level_count(isyntax);
+    if (start_at_page >= level_count) {
+        fprintf(stderr, "Error: The page number %d is out of range. The image only has %d pages. Set --start-at-page to a smaller value.\n", start_at_page, level_count);
+        libisyntax_close(isyntax);
+        return -1;
+    }
+
     int32_t internal_tile_width = libisyntax_get_tile_width(isyntax);
     int32_t internal_tile_height = libisyntax_get_tile_height(isyntax);
-    LOG_VAR("%d", internal_tile_width);
-    LOG_VAR("%d", internal_tile_height);
-    LOG_VAR("%llu", cache_size);
-    LOG_VAR("%d", compression_type);
-    LOG_VAR("%d", quality);
-    LOG_VAR("%d", tile_size);
 
     isyntax_cache_t *isyntax_cache = NULL;
     if (libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) != LIBISYNTAX_OK) {
@@ -333,9 +349,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to create %s\n", output_tiffname);
         return -1;
     }
-
-    // Write all levels to the output TIFF.
-    int start_at_page = 2;
 
     const isyntax_image_t *image = libisyntax_get_image(isyntax, 0);
     int32_t num_levels = libisyntax_image_get_level_count(image);
