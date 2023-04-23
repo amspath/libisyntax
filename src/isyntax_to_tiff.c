@@ -326,9 +326,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    int32_t internal_tile_width = libisyntax_get_tile_width(isyntax);
-    int32_t internal_tile_height = libisyntax_get_tile_height(isyntax);
-
     isyntax_cache_t *isyntax_cache = NULL;
     if (libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) != LIBISYNTAX_OK) {
         fprintf(stderr, "Failed to create iSyntax cache with size %llu.\n", cache_size);
