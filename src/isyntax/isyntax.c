@@ -2090,6 +2090,7 @@ static inline u64 bitstream_lsb_read(u8* buffer, u32 pos) {
 	return raw;
 }
 
+
 static inline u64 bitstream_lsb_read_advance(u8* buffer, i32* bits_read, i32 bits_to_read) {
 	u64 raw = *(u64*)(buffer + (*bits_read / 8));
 	raw >>= (*bits_read / 8);
@@ -2441,7 +2442,6 @@ bool isyntax_hulsken_decompress(u8* compressed, size_t compressed_size, i32 bloc
 				//   n zero symbols -> depth becomes n * counter_bits
 				u32 total_zero_counter_size = zero_counter_size;
 				for(;;) {
-					// Peek ahead in the bitstream, grab any additional zero run symbols, and recalculate numzeroes.
 					blob = bitstream_lsb_read(compressed, bits_read);
 					u32 next_code = (blob & zerorun_code_mask);
 					if (next_code == zerorun_code) {

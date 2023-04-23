@@ -2,10 +2,10 @@ cmake_minimum_required(VERSION 3.15)
 project(libisyntax)
 
 set(CMAKE_C_STANDARD 17)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -O1 -fno-omit-frame-pointer -g")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
-set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -fsanitize=address")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -O1 -fno-omit-frame-pointer -g")
+#set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+#set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+#set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -fsanitize=address")
 
 
 
@@ -28,6 +28,13 @@ include_directories("${CMAKE_SOURCE_DIR}/src/platform")
 include_directories("${CMAKE_SOURCE_DIR}/src/utils")
 include_directories("${CMAKE_SOURCE_DIR}/src/isyntax")
 include_directories("${CMAKE_SOURCE_DIR}/src/third_party")
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PIXMAN REQUIRED IMPORTED_TARGET pixman-1)
+
+# Add Pixman include directories to all targets
+include_directories(${PIXMAN_INCLUDE_DIRS})
+
 
 set(LIBISYNTAX_COMMON_SOURCE_FILES
         src/libisyntax.c
@@ -57,6 +64,8 @@ add_executable(isyntax_example
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
 
+target_link_libraries(isyntax_example PRIVATE PkgConfig::PIXMAN)
+
 # Find LibTIFF library
 find_package(TIFF REQUIRED)
 if (NOT TIFF_FOUND)
@@ -67,7 +76,7 @@ else()
     add_executable(isyntax-to-tiff
             src/isyntax_to_tiff.c
             ${LIBISYNTAX_COMMON_SOURCE_FILES} ${TIFF_LIBRARIES} src/isyntax_to_tiff.c)
-    target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES})
+    target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES} PkgConfig::PIXMAN)
 endif()
 
 
