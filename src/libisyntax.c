@@ -408,8 +408,8 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     int32_t PER_LEVEL_PADDING = 3;
     float offset = (float)((PER_LEVEL_PADDING << isyntax->images[0].level_count) - PER_LEVEL_PADDING) / current_level->downsample_factor;
 
-    // -0.5 seems to improve it a bit
-    // offset -= 1.0f;
+    // -1.5 seems to work. TODO(jt): Why??
+     offset -= 1.5f;
 
     float x_float = (float)x + offset;
     float y_float = (float)y + offset;
