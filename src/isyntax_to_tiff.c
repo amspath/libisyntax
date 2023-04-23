@@ -140,6 +140,9 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
             // Write the tile to the output TIFF.
             TIFFWriteTile(output_tiff, tile_pixels, x_coord, y_coord, 0, 0);
+            if (tile_pixels != pixels) {
+                free(tile_pixels);
+            }
 
             ++tile_progress;
             int32_t tile_percent = (tile_progress * 100) / tiles_in_page;
