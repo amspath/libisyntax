@@ -105,7 +105,7 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
     TIFFSetField(output_tiff, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
     TIFFSetField(output_tiff, TIFFTAG_EXTRASAMPLES, 1, (uint16_t[]) {EXTRASAMPLE_UNASSALPHA});
 
-    if (level == 0) {
+    if (scale == 0) {
         TIFFSetField(output_tiff, TIFFTAG_SUBFILETYPE, 0);
     } else {
         TIFFSetField(output_tiff, TIFFTAG_SUBFILETYPE, FILETYPE_REDUCEDIMAGE);
