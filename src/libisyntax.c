@@ -460,8 +460,10 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     int64_t larger_x = (int64_t)floor(x_float);
     int64_t larger_y = (int64_t)floor(y_float);
 
+
     // Check if x_float and y_float are integers (their fractional parts are zero)
-    if (x_float == (float)larger_x && y_float == (float)larger_y) {
+    // TODO: This is not correct
+    if (!(x_float - (float)x_float > 0 || y_float - (float)y_float > 0)) {
         // Read the original shape directly without cropping
         error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, (int64_t)x_float, (int64_t)y_float, width, height, out_pixels);
     } else {
