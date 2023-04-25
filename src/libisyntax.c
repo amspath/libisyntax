@@ -346,6 +346,12 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
 
             // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
             // tile.
+            // Make sure we don't access any tiles beyond the bounds
+            assert(tile_x >= 0);
+            assert(tile_y >= 0);
+            assert(tile_x < current_level->width_in_tiles);
+            assert(tile_y < current_level->height_in_tiles);
+
             int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
             bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
             if (tile_exists) {
@@ -360,10 +366,12 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                 // Free the tile data
                 free(pixels);
             } else {
-                // Fill up with transparent white pixels (R=255, G=255, B=255, A=0)
+                // Fill up with non-transparent white pixels (R=255, G=255, B=255, A=255)
+                // A=0 might make more sense, but the Philips SDK seems to output empty tiles A = 255.
+                // TODO(jt): Double check!
                 for (int64_t i = 0; i < copy_height; ++i) {
                     for (int64_t j = 0; j < copy_width; ++j) {
-                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0x00FFFFFFu;
+                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
                     }
                 }
             }
@@ -459,7 +467,6 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
 
     int64_t larger_x = (int64_t)floor(x_float);
     int64_t larger_y = (int64_t)floor(y_float);
-
 
     // Check if x_float and y_float are integers (their fractional parts are zero)
     // TODO: This is not correct
