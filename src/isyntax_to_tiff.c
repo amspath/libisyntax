@@ -121,6 +121,11 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
             int32_t region_height = (y_coord + tile_height > height) ? height - y_coord : tile_height;
 
             uint32_t *pixels = NULL;
+
+            // Checking if we are reading within bounds
+            assert(x_coord + region_width <= width);
+            assert(y_coord + region_height <= height);
+
             assert(libisyntax_read_region(isyntax, isyntax_cache, scale, x_coord, y_coord, region_width, region_height,
                                           &pixels) == LIBISYNTAX_OK);
 
@@ -136,6 +141,9 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
                     memcpy(tile_pixels + row * tile_width, pixels + row * region_width,
                            region_width * sizeof(uint32_t));
                 }
+                libisyntax_tile_free_pixels(pixels);  // Move this line here
+            } else {
+                tile_pixels = pixels;
             }
 
             // Write the tile to the output TIFF.
@@ -154,8 +162,6 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
             double avg_time_per_tile = elapsed_global_time / (*total_tiles_written + tile_progress);
             double eta = avg_time_per_tile * (total_tiles - (*total_tiles_written + tile_progress));
             update_progress(total_progress, tile_percent, scale, eta);
-
-            libisyntax_tile_free_pixels(pixels);
         }
     }
 
