@@ -395,7 +395,7 @@ void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, flo
     pixman_image_set_transform(src_image, &transform);
 
     // Set bilinear filter for interpolation
-    pixman_image_set_filter(src_image, PIXMAN_FILTER_BEST, NULL, 0);
+    pixman_image_set_filter(src_image, PIXMAN_FILTER_BILINEAR, NULL, 0);
 
     // Composite the source image with the destination image using the transformation matrix
     pixman_image_composite32(PIXMAN_OP_SRC, src_image, NULL, dst_image, 0, 0, 0, 0, 0, 0, output_width, output_height);
