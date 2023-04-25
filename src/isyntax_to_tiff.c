@@ -132,7 +132,7 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
             // Convert data to the correct pixel format (bgra->rgba).
             bgra_to_rgba(pixels, region_width, region_height);
 
-            uint32_t *tile_pixels = pixels;
+            uint32_t *tile_pixels = NULL;
 
             // In case our actual tile is smaller, we need to convert it to a full tile.
             if (region_width != tile_width || region_height != tile_height) {
@@ -148,8 +148,8 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
             // Write the tile to the output TIFF.
             TIFFWriteTile(output_tiff, tile_pixels, x_coord, y_coord, 0, 0);
-            if (tile_pixels != pixels) {
-                free(tile_pixels);
+            if (tile_pixels != NULL) {
+                libisyntax_tile_free_pixels(tile_pixels);
             }
 
             ++tile_progress;
