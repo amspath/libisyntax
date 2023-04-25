@@ -316,7 +316,7 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
 
     // Get the level
-    assert(level < &isyntax->images[0].level_count);
+    assert(level < isyntax->images[0].level_count);
     isyntax_level_t* current_level = &isyntax->images[0].levels[level];
 
     int32_t tile_width = isyntax->tile_width;
