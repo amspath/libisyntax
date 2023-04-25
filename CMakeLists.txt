@@ -71,7 +71,7 @@ add_executable(isyntax_example
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
 
-target_link_libraries(isyntax_example PRIVATE PkgConfig::PIXMAN)
+target_link_libraries(isyntax_example PRIVATE PkgConfig::PIXMAN Threads::Threads ${LIBRT})
 
 # Find LibTIFF library
 find_package(TIFF REQUIRED)
@@ -83,7 +83,7 @@ else()
     add_executable(isyntax-to-tiff
             src/isyntax_to_tiff.c
             ${LIBISYNTAX_COMMON_SOURCE_FILES} ${TIFF_LIBRARIES} src/isyntax_to_tiff.c)
-    target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES} PkgConfig::PIXMAN)
+    target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES} PkgConfig::PIXMAN Threads::Threads ${LIBRT})
 endif()
 
 
