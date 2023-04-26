@@ -343,8 +343,9 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
             int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
             int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - (x % tile_width);
             int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height - (y % tile_height);
-            int64_t copy_width = (tile_x == end_tile_x) ? x + width - tile_x * tile_width : tile_width - src_x;
-            int64_t copy_height = (tile_y == end_tile_y) ? y + height - tile_y * tile_height : tile_height - src_y;
+            int64_t copy_width = (tile_x == end_tile_x) ? (x + width - 1) % tile_width - src_x + 1 : tile_width - src_x;
+            int64_t copy_height = (tile_y == end_tile_y) ? (y + height - 1) % tile_height - src_y + 1 : tile_height - src_y;
+
 
             uint32_t *pixels = NULL;
 
@@ -358,7 +359,6 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
             int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
             // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
             // tile.
-            // Make sure we don't access any tiles beyond the bounds
             bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
             if (tile_exists) {
                 // Read tile
@@ -393,18 +393,19 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
 
                 int64_t dest_index = (dest_y + i) * width + dest_x;
                 int64_t src_index = (src_y + i) * tile_width + src_x;
+                assert(src_x + copy_width <= tile_width);
+                assert(src_y + copy_height <= tile_height);
 
                 assert(dest_index >= 0);
                 assert(src_index >= 0);
-                assert(dest_index + copy_width * sizeof(uint32_t) <= width * height * sizeof(uint32_t));
-                assert(src_index + copy_width * sizeof(uint32_t) <= tile_width * tile_height * sizeof(uint32_t));
+                assert(dest_index + copy_width <= width * height);
+                assert(src_index + copy_width <= tile_width * tile_height);
 
                 memcpy((*out_pixels) + dest_index,
                        pixels + src_index,
                        copy_width * sizeof(uint32_t));
             }
             // Free the tile data if it exists
-            // TODO(jt): Probably we can just check if the tile exists
             if (pixels != NULL && pixels != empty_tile) {
                 libisyntax_tile_free_pixels(pixels);
             }
