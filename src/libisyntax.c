@@ -349,21 +349,12 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
 
             uint32_t *pixels = NULL;
 
-            assert(copy_width > 0);
-            assert(copy_height > 0);
-            assert(dest_x >= 0);
-            assert(dest_y >= 0);
-            assert(dest_x < width);
-            assert(dest_y < height);
-
             int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
             // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
             // tile.
             bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
             if (tile_exists) {
                 // Read tile
-                assert(tile_x >= 0);
-                assert(tile_y >= 0);
                 assert(tile_x < current_level->width_in_tiles);
                 assert(tile_y < current_level->height_in_tiles);
                 assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
@@ -382,25 +373,8 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
 
             // Copy the relevant portion of the tile to the region
             for (int64_t i = 0; i < copy_height; ++i) {
-                assert(src_x >= 0);
-                assert(src_y >= 0);
-                assert(src_x < tile_width);
-                assert(src_y < tile_height);
-
-                // Ensure i is within the copy area bounds
-                assert(i >= 0);
-                assert(i < copy_height);
-
                 int64_t dest_index = (dest_y + i) * width + dest_x;
                 int64_t src_index = (src_y + i) * tile_width + src_x;
-                assert(src_x + copy_width <= tile_width);
-                assert(src_y + copy_height <= tile_height);
-
-                assert(dest_index >= 0);
-                assert(src_index >= 0);
-                assert(dest_index + copy_width <= width * height);
-                assert(src_index + copy_width <= tile_width * tile_height);
-
                 memcpy((*out_pixels) + dest_index,
                        pixels + src_index,
                        copy_width * sizeof(uint32_t));
