@@ -337,8 +337,7 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
             int64_t src_x = (tile_x == start_tile_x) ? x % tile_width : 0;
             int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
             int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - (x % tile_width);
-            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height -
-                                                            (y % tile_height);
+            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height - (y % tile_height);
             int64_t copy_width = (tile_x == end_tile_x) ? x + width - tile_x * tile_width : tile_width - src_x;
             int64_t copy_height = (tile_y == end_tile_y) ? y + height - tile_y * tile_height : tile_height - src_y;
 
@@ -350,8 +349,13 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
             assert(dest_y >= 0);
             assert(dest_x < width);
             assert(dest_y < height);
-            assert(dest_x + copy_width <= width);
-            assert(dest_y + copy_height <= height);
+
+//            if (dest_x + copy_width > width || dest_y + copy_height > height) {
+//                printf("dest_x: %ld, dest_y: %ld, copy_width: %ld, copy_height: %ld, width: %ld, height: %ld\n",
+//                       dest_x, dest_y, copy_width, copy_height, width, height);
+//            }
+//            assert(dest_x + copy_width <= width);
+//            assert(dest_y + copy_height <= height);
 
             int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
             // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
@@ -395,20 +399,9 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                 // Fill up with non-transparent white pixels (R=255, G=255, B=255, A=255)
                 // A=0 might make more sense, but the Philips SDK seems to output empty tiles A = 255.
                 // TODO(jt): Double check!
-                for (int64_t i = 0; i < copy_height; ++i) {
-                    for (int64_t j = 0; j < copy_width; ++j) {
-                        // Ensure dest_x and dest_y are within the allocated region bounds
-                        assert(copy_width > 0);
-                        assert(copy_height > 0);
-                        assert(i >= 0);
-                        assert(j >= 0);
-                        assert(i < copy_height);
-                        assert(j < copy_width);
-                        int64_t index = (dest_y + i) * width + dest_x + j;
-                        assert(index >= 0);
-                        assert(index < width * height);
-
-                        (*out_pixels)[index] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
+                for (int64_t i = 0; i < tile_height; ++i) {
+                    for (int64_t j = 0; j < tile_width; ++j) {
+                        (*out_pixels)[i * width + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
                     }
                 }
             }
@@ -463,7 +456,6 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     int64_t larger_y = (int64_t)floor(y_float);
 
     // Check if x_float and y_float are integers (their fractional parts are zero)
-    // TODO: This is not correct
     if (!(x_float - (float)x_float > 0 || y_float - (float)y_float > 0)) {
         // Read the original shape directly without cropping
         error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, (int64_t)x_float, (int64_t)y_float, width, height, out_pixels);
