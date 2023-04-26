@@ -347,15 +347,16 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
             // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
             // tile.
             // Make sure we don't access any tiles beyond the bounds
-            assert(tile_x >= 0);
-            assert(tile_y >= 0);
-            assert(tile_x < current_level->width_in_tiles);
-            assert(tile_y < current_level->height_in_tiles);
 
             int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
             bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
             if (tile_exists) {
                 // Read tile
+                assert(tile_x >= 0);
+                assert(tile_y >= 0);
+                assert(tile_x < current_level->width_in_tiles);
+                assert(tile_y < current_level->height_in_tiles);
+
                 assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
                 // Copy the relevant portion of the tile to the region
                 for (int64_t i = 0; i < copy_height; ++i) {
@@ -371,7 +372,30 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                 // TODO(jt): Double check!
                 for (int64_t i = 0; i < copy_height; ++i) {
                     for (int64_t j = 0; j < copy_width; ++j) {
-                        (*out_pixels)[(dest_y + i) * width + dest_x + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
+                        // Ensure dest_x and dest_y are within the allocated region bounds
+                        assert(dest_x >= 0);
+                        assert(dest_y >= 0);
+                        assert(dest_x < width);
+                        assert(dest_y < height);
+
+                        // Ensure copy_width and copy_height are within the allocated region bounds
+                        assert(copy_width > 0);
+                        assert(copy_height > 0);
+                        assert(dest_x + copy_width <= width);
+                        assert(dest_y + copy_height <= height);
+
+                        // Ensure i and j are within the copy area bounds
+                        assert(i >= 0);
+                        assert(j >= 0);
+                        assert(i < copy_height);
+                        assert(j < copy_width);
+
+                        // Ensure the index being written to is within the allocated region bounds
+                        int64_t index = (dest_y + i) * width + dest_x + j;
+                        assert(index >= 0);
+                        assert(index < width * height);
+
+                        (*out_pixels)[index] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
                     }
                 }
             }
@@ -407,49 +431,6 @@ void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, flo
     pixman_image_unref(src_image);
     pixman_image_unref(dst_image);
 }
-
-isyntax_error_t libisyntax_read_region_old(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
-                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
-    isyntax_error_t error;
-    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
-
-    int32_t PER_LEVEL_PADDING = 3;
-    float offset = (float)((PER_LEVEL_PADDING << isyntax->images[0].level_count) - PER_LEVEL_PADDING) / current_level->downsample_factor;
-
-    // -1.5 seems to work. TODO(jt): Why??
-     offset -= 1.5f;
-
-    float x_float = (float)x + offset;
-    float y_float = (float)y + offset;
-
-    // Width only needs to be 1 larger for the interpolation
-    int64_t larger_width = width + 1;
-    int64_t larger_height = height + 1;
-    int64_t larger_x = (int64_t)floor(x_float);
-    int64_t larger_y = (int64_t)floor(y_float);
-
-    // Extract the larger region
-    uint32_t* larger_region_pixels = NULL;
-    error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, larger_x, larger_y, larger_width, larger_height, &larger_region_pixels);
-
-    if (error != LIBISYNTAX_OK) {
-        return error;
-    }
-
-    // Allocate memory for the final output region
-    *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
-
-    // Crop the larger region to the desired region using the crop_image function
-    crop_image(larger_region_pixels, *out_pixels, larger_width, larger_height, x_float - larger_x, y_float - larger_y, (float)width, (float)height, width, height);
-
-    // Free the memory allocated for the larger region
-    free(larger_region_pixels);
-
-
-
-    return LIBISYNTAX_OK;
-}
-
 
 isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
