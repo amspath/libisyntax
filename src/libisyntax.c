@@ -436,11 +436,11 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     float x_float = (float)x + offset;
     float y_float = (float)y + offset;
 
-    int64_t larger_x = (int64_t)floor(x_float);
-    int64_t larger_y = (int64_t)floor(y_float);
+    int64_t larger_x = floor(x_float);
+    int64_t larger_y = floor(y_float);
 
     // Check if x_float and y_float are integers (their fractional parts are zero)
-    if (false) {
+    if (larger_x == x_float && larger_y == y_float) {
         // Read the original shape directly without cropping
         error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, (int64_t)x_float, (int64_t)y_float, width, height, out_pixels);
     } else {
@@ -450,7 +450,7 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
 
         // Extract the larger region
         uint32_t* larger_region_pixels = NULL;
-        error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, larger_x, larger_y, larger_width, larger_height, &larger_region_pixels);
+        error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, (int64_t)larger_x, (int64_t)larger_y, larger_width, larger_height, &larger_region_pixels);
 
         if (error != LIBISYNTAX_OK) {
             return error;
