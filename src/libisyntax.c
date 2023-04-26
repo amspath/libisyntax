@@ -350,13 +350,6 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
             assert(dest_x < width);
             assert(dest_y < height);
 
-//            if (dest_x + copy_width > width || dest_y + copy_height > height) {
-//                printf("dest_x: %ld, dest_y: %ld, copy_width: %ld, copy_height: %ld, width: %ld, height: %ld\n",
-//                       dest_x, dest_y, copy_width, copy_height, width, height);
-//            }
-//            assert(dest_x + copy_width <= width);
-//            assert(dest_y + copy_height <= height);
-
             int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
             // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
             // tile.
@@ -368,45 +361,45 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                 assert(tile_y >= 0);
                 assert(tile_x < current_level->width_in_tiles);
                 assert(tile_y < current_level->height_in_tiles);
-
                 assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
-                // Copy the relevant portion of the tile to the region
-                for (int64_t i = 0; i < copy_height; ++i) {
-                    assert(src_x >= 0);
-                    assert(src_y >= 0);
-                    assert(src_x < tile_width);
-                    assert(src_y < tile_height);
-
-                    // Ensure i is within the copy area bounds
-                    assert(i >= 0);
-                    assert(i < copy_height);
-
-                    int64_t dest_index = (dest_y + i) * width + dest_x;
-                    int64_t src_index = (src_y + i) * tile_width + src_x;
-
-                    assert(dest_index >= 0);
-                    assert(src_index >= 0);
-                    assert(dest_index + copy_width * sizeof(uint32_t) <= width * height * sizeof(uint32_t));
-                    assert(src_index + copy_width * sizeof(uint32_t) <= tile_width * tile_height * sizeof(uint32_t));
-
-                    memcpy((*out_pixels) + dest_index,
-                           pixels + src_index,
-                           copy_width * sizeof(uint32_t));
-                }
-                // Free the tile data
-                free(pixels);
             } else {
-                // Fill up with non-transparent white pixels (R=255, G=255, B=255, A=255)
-                // A=0 might make more sense, but the Philips SDK seems to output empty tiles A = 255.
-                // TODO(jt): Double check!
+                // Allocate an empty tile filled with non-transparent white pixels
+                pixels = (uint32_t*)malloc(tile_width * tile_height * sizeof(uint32_t));
                 for (int64_t i = 0; i < tile_height; ++i) {
                     for (int64_t j = 0; j < tile_width; ++j) {
-                        (*out_pixels)[i * width + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
+                        pixels[i * tile_width + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
                     }
                 }
             }
+
+            // Copy the relevant portion of the tile to the region
+            for (int64_t i = 0; i < copy_height; ++i) {
+                assert(src_x >= 0);
+                assert(src_y >= 0);
+                assert(src_x < tile_width);
+                assert(src_y < tile_height);
+
+                // Ensure i is within the copy area bounds
+                assert(i >= 0);
+                assert(i < copy_height);
+
+                int64_t dest_index = (dest_y + i) * width + dest_x;
+                int64_t src_index = (src_y + i) * tile_width + src_x;
+
+                assert(dest_index >= 0);
+                assert(src_index >= 0);
+                assert(dest_index + copy_width * sizeof(uint32_t) <= width * height * sizeof(uint32_t));
+                assert(src_index + copy_width * sizeof(uint32_t) <= tile_width * tile_height * sizeof(uint32_t));
+
+                memcpy((*out_pixels) + dest_index,
+                       pixels + src_index,
+                       copy_width * sizeof(uint32_t));
+            }
+            // Free the tile data
+            free(pixels);
         }
     }
+
     return LIBISYNTAX_OK;
 }
 
