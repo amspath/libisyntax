@@ -404,6 +404,7 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                        copy_width * sizeof(uint32_t));
             }
             // Free the tile data if it exists
+            // TODO(jt): Probably we can just check if the tile exists
             if (pixels != NULL && pixels != empty_tile) {
                 libisyntax_tile_free_pixels(pixels);
             }
