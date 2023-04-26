@@ -384,7 +384,7 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                     assert(src_index >= 0);
                     assert(dest_index + copy_width * sizeof(uint32_t) <= width * height * sizeof(uint32_t));
                     assert(src_index + copy_width * sizeof(uint32_t) <= tile_width * tile_height * sizeof(uint32_t));
-                    
+
                     memcpy((*out_pixels) + dest_index,
                            pixels + src_index,
                            copy_width * sizeof(uint32_t));
