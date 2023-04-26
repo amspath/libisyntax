@@ -330,6 +330,10 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
     // Allocate memory for region
     *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
 
+    // Initialize the empty tile as a NULL pointer
+    // TODO: Maybe you want to attach this to some object so we do not need to keep on reallocating these things?
+    uint32_t *empty_tile = NULL;
+
     // Read tiles and copy the relevant portion of each tile to the region
     for (int64_t tile_y = start_tile_y; tile_y <= end_tile_y; ++tile_y) {
         for (int64_t tile_x = start_tile_x; tile_x <= end_tile_x; ++tile_x) {
@@ -363,13 +367,16 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                 assert(tile_y < current_level->height_in_tiles);
                 assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
             } else {
-                // Allocate an empty tile filled with non-transparent white pixels
-                pixels = (uint32_t*)malloc(tile_width * tile_height * sizeof(uint32_t));
-                for (int64_t i = 0; i < tile_height; ++i) {
-                    for (int64_t j = 0; j < tile_width; ++j) {
-                        pixels[i * tile_width + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
+                // Allocate memory for the empty tile and fill it with non-transparent white pixels only when required
+                if (empty_tile == NULL) {
+                    empty_tile = (uint32_t*)malloc(tile_width * tile_height * sizeof(uint32_t));
+                    for (int64_t i = 0; i < tile_height; ++i) {
+                        for (int64_t j = 0; j < tile_width; ++j) {
+                            empty_tile[i * tile_width + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
+                        }
                     }
                 }
+                pixels = empty_tile;
             }
 
             // Copy the relevant portion of the tile to the region
@@ -395,9 +402,16 @@ isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cac
                        pixels + src_index,
                        copy_width * sizeof(uint32_t));
             }
-            // Free the tile data
-            free(pixels);
+            // Free the tile data if it exists
+            if (tile_exists) {
+                libisyntax_tile_free_pixels(pixels);
+            }
         }
+    }
+
+    // Free the empty tile data if it was allocated
+    if (empty_tile != NULL) {
+        libisyntax_tile_free_pixels(empty_tile);
     }
 
     return LIBISYNTAX_OK;
