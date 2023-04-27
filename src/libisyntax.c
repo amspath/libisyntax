@@ -174,7 +174,6 @@ atomic_int dbgctr_init_thread_pool_counter = 0;
 atomic_int dbgctr_init_global_mutexes_created = 0;
 
 static benaphore_t* libisyntax_get_global_mutex() {
-    // https://stackoverflow.com/questions/42082219/declaring-atomic-pointers-vs-pointers-to-atomics
     static benaphore_t libisyntax_global_mutex;
     static atomic_int init_status = 0; // 0 - not initialized, 1 - being initialized, 2 - done initializing.
 
@@ -187,13 +186,12 @@ static benaphore_t* libisyntax_get_global_mutex() {
         DBGCTR_COUNT(dbgctr_init_global_mutexes_created);
         atomic_store(&init_status, 2);
     } else if (init_status_expected == 2) {
-        // Initialization done.
+        // Initialization done. (This path is a fast path reusing result of atomic_compare_exchange_strong to avoid
+        // an extra atomic_load call in the loop below).
     } else {
         // Wait until the other thread finishes initialization. Since we don't have a mutex, spinlock is
         // the best we can do here. It should be a very short critical section.
-        while (atomic_load(&init_status) < 2) {
-            // spin.
-        }
+        while (atomic_load(&init_status) < 2) { /* spin. */ }
     }
 
     return &libisyntax_global_mutex;
