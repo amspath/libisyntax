@@ -13,7 +13,6 @@
 //   is: libisyntax_<object>_<action>(..), where <object> is omitted for the object representing the isyntax file.
 // - Functions don't check for null/out of bounds, for efficiency. (they may assert, but that is implementation detail).
 // - Booleans are represented as int32_t and prefxied with 'is_' or 'has_'.
-// - Enums are represented as int32_t and not the enum type. (enum type size forcing is C23 or C++11).
 // - Const applied to pointers is used as a signal that the object will not be modified.
 // - Prefer int even for unsigned types, see java rationale.
 
@@ -25,13 +24,6 @@ typedef int32_t isyntax_error_t;
 #define LIBISYNTAX_FATAL 1
 // One of the arguments passed to a function is invalid.
 #define LIBISYNTAX_INVALID_ARGUMENT 2
-
-enum isyntax_pixel_format_t {
-  _LIBISYNTAX_PIXEL_FORMAT_START = 0x100,
-  LIBISYNTAX_PIXEL_FORMAT_RGBA,
-  LIBISYNTAX_PIXEL_FORMAT_BGRA,
-  _LIBISYNTAX_PIXEL_FORMAT_END,
-};
 
 typedef struct isyntax_t isyntax_t;
 typedef struct isyntax_image_t isyntax_image_t;
@@ -72,12 +64,12 @@ void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 
 
 //== Tile API ==
-// Reads a tile into a user-supplied buffer. Buffer size should be [tile_width * tile_height * 4], as returned by
-// `libisyntax_get_tile_width()`/`libisyntax_get_tile_height()`. The caller is responsible for managing the buffer
-// allocation/deallocation.
-// pixel_format is one of isyntax_pixel_format_t.
+// Note: pixels are in BGRA layout.
+// Note: must use libisyntax_tile_free_pixels() to free out_pixels.
+// TODO(avirodov): are the pixels guaranteed to survive libisyntax_close()? Alternatively, change API to
+//  allow user to supply the buffer, as long as the user can compute the size.
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
-                                     int32_t level, int64_t tile_x, int64_t tile_y,
-                                     uint32_t* pixels_buffer, int32_t pixel_format);
+                                     int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels);
+void            libisyntax_tile_free_pixels(uint32_t* pixels);
 
 

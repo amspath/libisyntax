@@ -199,39 +199,35 @@ static isyntax_tile_children_t isyntax_openslide_compute_children(isyntax_t* isy
 }
 
 
-static void isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isyntax, isyntax_tile_t* tile,
-                                   uint32_t* pixels_buffer, enum isyntax_pixel_format_t pixel_format) {
+static uint32_t* isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isyntax, isyntax_tile_t* tile,
+                                        bool return_rgb) {
     if (tile->tile_scale == 0) {
-        ASSERT(pixels_buffer != NULL); // Shouldn't be asking for idwt at level 0 if we're not going to use the result for pixels.
-        isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
+        ASSERT(return_rgb); // Shouldn't be asking for idwt at level 0 if we're not going to use the result for pixels.
+        return isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
                                  tile->tile_scale, tile->tile_x, tile->tile_y,
-                                 &cache->ll_coeff_block_allocator,
-                                 pixels_buffer, pixel_format);
-        return;
+                                 &cache->ll_coeff_block_allocator, /*decode_rgb=*/true);
     }
 
-    if (pixels_buffer != NULL) {
+    if (return_rgb) {
         // TODO(avirodov): if we want rgb from tile where idwt was done already, this could be cheaper if we store
         //  the lls in the tile. Currently need to recompute idwt.
-        isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
-                          tile->tile_scale, tile->tile_x, tile->tile_y,
-                          &cache->ll_coeff_block_allocator,
-                          pixels_buffer, pixel_format);
-        return;
+        return isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
+                                 tile->tile_scale, tile->tile_x, tile->tile_y,
+                                 &cache->ll_coeff_block_allocator, /*decode_rgb=*/true);
     }
 
     // If all children have ll coefficients and we don't need the rgb pixels, no need to do the idwt.
-    ASSERT(pixels_buffer == NULL && tile->tile_scale > 0);
+    ASSERT(!return_rgb && tile->tile_scale > 0);
     isyntax_tile_children_t children = isyntax_openslide_compute_children(isyntax, tile);
     if (children.child_top_left->has_ll && children.child_top_right->has_ll &&
         children.child_bottom_left->has_ll && children.child_bottom_right->has_ll) {
-        return;
+        return NULL;
     }
 
     isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
                       tile->tile_scale, tile->tile_x, tile->tile_y,
-                      &cache->ll_coeff_block_allocator,
-                      /*pixels_buffer=*/NULL, /*pixel_format=*/0);
+                      &cache->ll_coeff_block_allocator, /*decode_rgb=*/false);
+    return NULL;
 }
 
 static void isyntax_make_tile_lists_add_parent_to_list(isyntax_t* isyntax, isyntax_tile_t* tile,
@@ -322,8 +318,7 @@ static void isyntax_make_tile_lists_by_scale(isyntax_t* isyntax, int start_scale
     }
 }
 
-void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, int tile_x, int tile_y,
-                       uint32_t* pixels_buffer, enum isyntax_pixel_format_t pixel_format) {
+uint32_t* isyntax_read_tile_bgra(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, int tile_x, int tile_y) {
     // TODO(avirodov): more granular locking (some notes below). This will require handling overlapping work, that is
     //  thread A needing tile 123 and started to load it, and thread B needing same tile 123 and needs to wait for A.
     benaphore_lock(&cache->mutex);
@@ -333,9 +328,10 @@ void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, in
     isyntax_tile_t *tile = &level->tiles[level->width_in_tiles * tile_y + tile_x];
     // printf("=== isyntax_openslide_load_tile scale=%d tile_x=%d tile_y=%d\n", scale, tile_x, tile_y);
     if (!tile->exists) {
-        memset(pixels_buffer, 0xff, isyntax->tile_width * isyntax->tile_height * 4);
+        uint32_t* rgba = malloc(isyntax->tile_width * isyntax->tile_height * 4);
+        memset(rgba, 0xff, isyntax->tile_width * isyntax->tile_height * 4);
         benaphore_unlock(&cache->mutex);
-        return;
+        return rgba;
     }
 
     // Need 3 lists:
@@ -376,9 +372,9 @@ void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, in
     }
     for (ITERATE_TILE_LIST(tile, idwt_list)) {
         if (tile == idwt_list.tail) {
-            isyntax_openslide_idwt(cache, isyntax, tile, pixels_buffer, pixel_format);
+            result = isyntax_openslide_idwt(cache, isyntax, tile, /*return_rgb=*/true);
         } else {
-            isyntax_openslide_idwt(cache, isyntax, tile, /*pixels_buffer=*/NULL, /*pixel_format=*/0);
+            isyntax_openslide_idwt(cache, isyntax, tile, /*return_rgb=*/false);
         }
     }
 
@@ -413,4 +409,5 @@ void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, in
     }
 
     benaphore_unlock(&cache->mutex);
+    return result;
 }

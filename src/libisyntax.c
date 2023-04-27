@@ -303,15 +303,15 @@ void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
 }
 
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
-                                     int32_t level, int64_t tile_x, int64_t tile_y,
-                                     uint32_t* pixels_buffer, int32_t pixel_format) {
-    if (pixel_format <= _LIBISYNTAX_PIXEL_FORMAT_START || pixel_format >= _LIBISYNTAX_PIXEL_FORMAT_END) {
-        return LIBISYNTAX_INVALID_ARGUMENT;
-    }
-    // TODO(avirodov): additional vaidations, e.g. tile_x >= 0 && tile_x < isyntax...[level]...->width_in_tiles.
-
+                                     int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels) {
     // TODO(avirodov): if isyntax_cache is null, we can support using allocators that are in isyntax object,
     //  if is_init_allocators = 1 when created. Not sure is needed.
-    isyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, pixels_buffer, pixel_format);
+    *out_pixels = isyntax_read_tile_bgra(isyntax, isyntax_cache, level, tile_x, tile_y);
     return LIBISYNTAX_OK;
 }
+
+void libisyntax_tile_free_pixels(uint32_t* pixels) {
+    free(pixels);
+}
+
+
