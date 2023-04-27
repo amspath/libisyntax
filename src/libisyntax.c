@@ -106,6 +106,7 @@ static void init_thread_pool() {
 #else
 
 #include <pthread.h>
+#include <stdatomic.h>
 
 static void* worker_thread(void* parameter) {
     platform_thread_info_t* thread_info = (platform_thread_info_t*) parameter;
@@ -163,11 +164,57 @@ static void init_thread_pool() {
 
 #endif
 
+// TODO(avirodov): int may be too small for some counters later on.
+// TODO(avirodov): should make a flag to turn counters off, they may have overhead.
+// TODO(avirodov): struct? move to isyntax.h/.c?
+// TODO(avirodov): debug api?
+// Note: using atomic_fetch_add in case we want to use the _explicit version later on. Could do _counter++.
+#define DBGCTR_COUNT(_counter) atomic_fetch_add(&_counter, 1)
+atomic_int dbgctr_init_thread_pool_counter = 0;
+atomic_int dbgctr_init_global_mutexes_created = 0;
+
+static benaphore_t* libisyntax_get_global_mutex() {
+  // https://stackoverflow.com/questions/42082219/declaring-atomic-pointers-vs-pointers-to-atomics
+  static benaphore_t* _Atomic libisyntax_global_mutex = NULL;
+
+  // We need to establish a global mutex, and this is nontrivial as mutex primitives available don't allow static
+  // initialization (more discussion in https://github.com/amspath/libisyntax/issues/16).
+  // Because we can't wait on an atomic, we will create the mutex on every parallel call, but only one mutex will be
+  // used eventually by all threads. Since this is first used in libisyntax_init(), assuming contention is low and
+  // number of extra mutexes created will be low as well.
+  benaphore_t* libisyntax_mutex = atomic_load(&libisyntax_global_mutex);
+  if (libisyntax_mutex == NULL) {
+    libisyntax_mutex = malloc(sizeof(benaphore_t));
+    *libisyntax_mutex = benaphore_create();
+    DBGCTR_COUNT(dbgctr_init_global_mutexes_created);
+    benaphore_t* expected = NULL;
+    if (atomic_compare_exchange_strong(&libisyntax_global_mutex, &expected, libisyntax_mutex)) {
+      // This thread's mutex wins, keep using it.
+    } else {
+      // This thread's mutex lost, clean up and load the winning mutex from the other thread.
+      benaphore_destroy(libisyntax_mutex);
+      free(libisyntax_mutex);
+      libisyntax_mutex = atomic_load(&libisyntax_global_mutex);
+    }
+  };
+
+  return libisyntax_mutex;
+}
 
 isyntax_error_t libisyntax_init() {
-	get_system_info(false);
-	init_thread_pool();
-    return LIBISYNTAX_OK;
+  // Lock-unlock to ensure that all parallel calls to libisyntax_init() wait for the actual initialization to complete.
+  benaphore_lock(libisyntax_get_global_mutex());
+  static bool libisyntax_global_init_complete = false;
+
+  if (libisyntax_global_init_complete == false) {
+    // Actual initialization.
+    get_system_info(false);
+    DBGCTR_COUNT(dbgctr_init_thread_pool_counter);
+    init_thread_pool();
+    libisyntax_global_init_complete = true;
+  }
+  benaphore_unlock(libisyntax_get_global_mutex());
+  return LIBISYNTAX_OK;
 }
 
 isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax) {

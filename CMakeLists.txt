@@ -96,6 +96,11 @@ if(BUILD_TESTING)
             COMMAND ${CMAKE_COMMAND} -E compare_files ../test/expected_output/testslide_example_tile_3_5_10.png ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/output_smoke_example_runs_with_test_slide_producing_output.png)
     set_tests_properties(regression_example_tile_3_5_10_pixel_check PROPERTIES DEPENDS smoke_example_runs_with_test_slide_producing_output)
 
+    add_executable(thread_test test/thread_test.c)
+    target_link_libraries(thread_test libisyntax)
+    add_test(NAME smoke_thread_test
+            COMMAND thread_test)
+
 endif() # if(BUILD_TESTING)
 
 
