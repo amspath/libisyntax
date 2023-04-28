@@ -106,7 +106,6 @@ static void init_thread_pool() {
 #else
 
 #include <pthread.h>
-#include <stdatomic.h>
 
 static void* worker_thread(void* parameter) {
     platform_thread_info_t* thread_info = (platform_thread_info_t*) parameter;
