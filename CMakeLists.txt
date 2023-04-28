@@ -82,9 +82,6 @@ add_library(libisyntax
 if (WIN32)
     target_link_libraries(libisyntax winmm)
 else()
-    set(THREADS_PREFER_PTHREAD_FLAG ON)
-    find_package(Threads REQUIRED)
-    target_link_libraries(libisyntax Threads::Threads)
 endif()
 
 add_executable(isyntax_example src/isyntax_example.c)
