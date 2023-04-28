@@ -3221,7 +3221,7 @@ void isyntax_destroy(isyntax_t* isyntax) {
 	while (isyntax->refcount > 0) {
 		platform_sleep(1);
 		if (isyntax->work_submission_queue) {
-			do_worker_work(isyntax->work_submission_queue, 0);
+            work_queue_do_work(isyntax->work_submission_queue, 0);
 		} else {
 			static bool already_printed = false;
 			if (!already_printed) {
