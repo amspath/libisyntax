@@ -71,11 +71,11 @@ _Noreturn DWORD WINAPI thread_proc(void* parameter) {
 			Sleep(100);
 			continue;
 		}
-		if (!is_queue_work_in_progress(thread_info->queue)) {
+		if (!work_queue_is_work_in_progress(thread_info->queue)) {
 			Sleep(1);
 			WaitForSingleObjectEx(thread_info->queue->semaphore, 1, FALSE);
 		}
-		do_worker_work(thread_info->queue, thread_info->logical_thread_index);
+        work_queue_do_work(thread_info->queue, thread_info->logical_thread_index);
 	}
 }
 
@@ -86,8 +86,8 @@ static void init_thread_pool() {
 	global_worker_thread_count = total_thread_count - 1;
 	global_active_worker_thread_count = global_worker_thread_count;
 
-	global_work_queue = create_work_queue("/worksem", 1024); // Queue for newly submitted tasks
-	global_completion_queue = create_work_queue("/completionsem", 1024); // Message queue for completed tasks
+	global_work_queue = work_queue_create("/worksem", 1024); // Queue for newly submitted tasks
+	global_completion_queue = work_queue_create("/completionsem", 1024); // Message queue for completed tasks
 
 	// NOTE: the main thread is considered thread 0.
 	for (i32 i = 1; i < total_thread_count; ++i) {
