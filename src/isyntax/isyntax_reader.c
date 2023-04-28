@@ -117,7 +117,8 @@ static void isyntax_openslide_load_tile_coefficients_ll_or_h(isyntax_cache_t* ca
             tile->color_channels[color].coeff_h = (icoeff_t *) block_alloc(&cache->h_coeff_block_allocator);
         }
         // TODO(avirodov): fancy allocators, for multiple sequential blocks (aka chunk). Or let OS do the caching.
-        u8* codeblock_data = malloc(codeblock->block_size);
+        // Adding 7 safety bytes so bitstream_lsb_read() won't access out of bounds in isyntax_hulsken_decompress().
+        u8* codeblock_data = malloc(codeblock->block_size + 7);
         size_t bytes_read = file_handle_read_at_offset(codeblock_data, isyntax->file_handle,
                                                        codeblock->block_data_offset, codeblock->block_size);
         if (!(bytes_read > 0)) {
