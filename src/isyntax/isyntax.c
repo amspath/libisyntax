@@ -47,7 +47,6 @@
 
 */
 
-#include <assert.h>
 #include "common.h"
 #include "work_queue.h"
 #include "intrinsics.h"
@@ -2041,7 +2040,7 @@ void isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 
             break;
 
         default:
-            assert("unknown pixel format!");
+            ASSERT(!"unknown pixel format!");
             break;
     }
 	isyntax->total_rgb_transform_time += get_seconds_elapsed(start, get_clock());

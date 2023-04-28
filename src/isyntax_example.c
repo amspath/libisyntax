@@ -6,7 +6,10 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "third_party/stb_image_write.h"  // for png export
 
-
+#define CHECK_LIBISYNTAX_OK(_libisyntax_call) do { \
+    isyntax_error_t result = _libisyntax_call;     \
+    assert(result == LIBISYNTAX_OK);               \
+} while(0);
 
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
@@ -63,13 +66,13 @@ int main(int argc, char** argv) {
         LOG_VAR("%d", tile_height);
 
         isyntax_cache_t *isyntax_cache = NULL;
-        assert(libisyntax_cache_create("example cache", 2000, &isyntax_cache) == LIBISYNTAX_OK);
-        assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
+        CHECK_LIBISYNTAX_OK(libisyntax_cache_create("example cache", 2000, &isyntax_cache));
+        CHECK_LIBISYNTAX_OK(libisyntax_cache_inject(isyntax_cache, isyntax));
 
         // RGBA is what stbi expects.
         uint32_t *pixels_rgba = malloc(tile_width * tile_height * 4);
-        assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y,
-                                    pixels_rgba, LIBISYNTAX_PIXEL_FORMAT_RGBA) == LIBISYNTAX_OK);
+        CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y,
+                                                 pixels_rgba, LIBISYNTAX_PIXEL_FORMAT_RGBA));
 
         printf("Writing %s...\n", output_png);
         stbi_write_png(output_png, tile_width, tile_height, 4, pixels_rgba, tile_width * 4);
