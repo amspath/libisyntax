@@ -79,17 +79,16 @@ add_library(libisyntax
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
 
-add_executable(isyntax_example
-        src/isyntax_example.c
-        ${LIBISYNTAX_COMMON_SOURCE_FILES}
-)
-
 if (WIN32)
     target_link_libraries(libisyntax winmm)
-    target_link_libraries(isyntax_example winmm)
 else()
-
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+    target_link_libraries(libisyntax Threads::Threads)
 endif()
+
+add_executable(isyntax_example src/isyntax_example.c)
+target_link_libraries(isyntax_example libisyntax)
 
 # TODO(avirodov): Consider moving testing to its own test/CMakeLists. This will require moving the library building
 #   to src/CMakeLists to avoid circular deps.

@@ -67,7 +67,8 @@ void parallel_run(int (*func)(void*), void* arg, bool force_sync) {
       threads[thread_i].arg = arg;
       threads[thread_i].force_sync = force_sync;
 
-      assert(thrd_create(&threads[thread_i].thread_id, parallel_sync_and_call, &threads[thread_i]) == thrd_success);
+      int result = thrd_create(&threads[thread_i].thread_id, parallel_sync_and_call, &threads[thread_i]);
+      assert(result == thrd_success);
     }
 
     // Sync and start the threads.
