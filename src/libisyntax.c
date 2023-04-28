@@ -122,7 +122,7 @@ static void* worker_thread(void* parameter) {
 			platform_sleep(100);
 			continue;
 		}
-        if (!is_queue_work_waiting_to_start(thread_info->queue)) {
+        if (!work_queue_is_work_waiting_to_start(thread_info->queue)) {
             //platform_sleep(1);
             sem_wait(thread_info->queue->semaphore);
             if (thread_info->logical_thread_index > global_active_worker_thread_count) {
@@ -131,7 +131,7 @@ static void* worker_thread(void* parameter) {
                 continue;
             }
         }
-        do_worker_work(thread_info->queue, thread_info->logical_thread_index);
+        work_queue_do_work(thread_info->queue, thread_info->logical_thread_index);
     }
 
     return 0;
@@ -142,8 +142,8 @@ static void init_thread_pool() {
     global_worker_thread_count = global_system_info.suggested_total_thread_count - 1;
     global_active_worker_thread_count = global_worker_thread_count;
 
-	global_work_queue = create_work_queue("/worksem", 1024); // Queue for newly submitted tasks
-	global_completion_queue = create_work_queue("/completionsem", 1024); // Message queue for completed tasks
+	global_work_queue = work_queue_create("/worksem", 1024); // Queue for newly submitted tasks
+	global_completion_queue = work_queue_create("/completionsem", 1024); // Message queue for completed tasks
 
     pthread_t threads[MAX_THREAD_COUNT] = {};
 
@@ -348,15 +348,15 @@ void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
 }
 
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
-                                     int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels) {
+                                     int32_t level, int64_t tile_x, int64_t tile_y,
+                                     uint32_t* pixels_buffer, int32_t pixel_format) {
+    if (pixel_format <= _LIBISYNTAX_PIXEL_FORMAT_START || pixel_format >= _LIBISYNTAX_PIXEL_FORMAT_END) {
+        return LIBISYNTAX_INVALID_ARGUMENT;
+    }
+    // TODO(avirodov): additional vaidations, e.g. tile_x >= 0 && tile_x < isyntax...[level]...->width_in_tiles.
+
     // TODO(avirodov): if isyntax_cache is null, we can support using allocators that are in isyntax object,
     //  if is_init_allocators = 1 when created. Not sure is needed.
-    *out_pixels = isyntax_read_tile_bgra(isyntax, isyntax_cache, level, tile_x, tile_y);
+    isyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, pixels_buffer, pixel_format);
     return LIBISYNTAX_OK;
 }
-
-void libisyntax_tile_free_pixels(uint32_t* pixels) {
-    free(pixels);
-}
-
-

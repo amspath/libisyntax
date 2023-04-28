@@ -8,9 +8,44 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 message(STATUS "CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|aarch64)")
-    message(STATUS "Enabling ARM NEON support")
-    add_compile_options(-mfpu=neon)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*|arm64.*|ARM64.*)")
+    set(IS_ARM64 TRUE)
+    set(ARM_ARCH "arm64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm.*|ARM.*)")
+    set(IS_ARM TRUE)
+    set(ARM_ARCH "arm")
+endif()
+
+if(APPLE AND (IS_ARM OR IS_ARM64))
+    set(IS_APPLE_SILICON TRUE)
+endif()
+
+if(IS_APPLE_SILICON)
+    message(STATUS "Detected Apple silicon ${ARM_ARCH} architecture")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch ${ARM_ARCH}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch ${ARM_ARCH}")
+    # Enable NEON for ARM-based Apple Silicon
+    add_compile_options(-march=armv8.2-a+fp16+simd)
+endif()
+
+
+option(ENABLE_MEMORY_CHECK "Enable memory check with sanitizers (requires DEBUG mode)" OFF)
+
+if(ENABLE_MEMORY_CHECK)
+    if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
+        message(FATAL_ERROR "ENABLE_MEMORY_CHECK is only allowed in Debug build mode")
+    endif()
+
+    if(APPLE)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -O1 -fno-omit-frame-pointer -g")
+        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+        set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -fsanitize=address")
+    elseif(UNIX AND NOT APPLE) # Linux
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O1 -g")
+        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Og -g")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Og -g")
+    endif()
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")

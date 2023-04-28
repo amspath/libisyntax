@@ -6,13 +6,12 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "third_party/stb_image_write.h"  // for png export
 
-
+#define CHECK_LIBISYNTAX_OK(_libisyntax_call) do { \
+    isyntax_error_t result = _libisyntax_call;     \
+    assert(result == LIBISYNTAX_OK);               \
+} while(0);
 
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
-
-uint32_t bgra_to_rgba(uint32_t val) {
-    return ((val & 0xff) << 16) | (val & 0x00ff00) | ((val & 0xff0000) >> 16) | (val & 0xff000000);
-}
 
 void print_isyntax_levels(isyntax_t* isyntax) {
     int wsi_image_idx = libisyntax_get_wsi_image_index(isyntax);
@@ -67,21 +66,19 @@ int main(int argc, char** argv) {
         LOG_VAR("%d", tile_height);
 
         isyntax_cache_t *isyntax_cache = NULL;
-        assert(libisyntax_cache_create("example cache", 2000, &isyntax_cache) == LIBISYNTAX_OK);
-        assert(libisyntax_cache_inject(isyntax_cache, isyntax) == LIBISYNTAX_OK);
+        CHECK_LIBISYNTAX_OK(libisyntax_cache_create("example cache", 2000, &isyntax_cache));
+        CHECK_LIBISYNTAX_OK(libisyntax_cache_inject(isyntax_cache, isyntax));
 
-        uint32_t *pixels = NULL;
-        assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
+        // RGBA is what stbi expects.
+        uint32_t *pixels_rgba = malloc(tile_width * tile_height * 4);
+        CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y,
+                                                 pixels_rgba, LIBISYNTAX_PIXEL_FORMAT_RGBA));
 
-        // convert data to the correct pixel format (bgra->rgba).
-        for (int i = 0; i < tile_height * tile_width; ++i) {
-            pixels[i] = bgra_to_rgba(pixels[i]);
-        }
         printf("Writing %s...\n", output_png);
-        stbi_write_png(output_png, tile_width, tile_height, 4, pixels, tile_width * 4);
+        stbi_write_png(output_png, tile_width, tile_height, 4, pixels_rgba, tile_width * 4);
         printf("Done writing %s.\n", output_png);
 
-        libisyntax_tile_free_pixels(pixels);
+        free(pixels_rgba);
         libisyntax_cache_destroy(isyntax_cache);
     }
 
