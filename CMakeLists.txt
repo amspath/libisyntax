@@ -4,13 +4,29 @@ project(libisyntax)
 set(CMAKE_C_STANDARD 17)
 
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
+
+# Memory sanitizer in case of debug mode
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+    if(APPLE)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -O1 -fno-omit-frame-pointer -g")
+        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fno-omit-frame-pointer")
+        set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -fsanitize=address")
+    elseif(UNIX AND NOT APPLE) # Linux
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O1 -g")
+        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Og -g")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Og -g")
+    endif()
+endif()
+
 message(STATUS "CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|aarch64)")
     message(STATUS "Enabling ARM NEON support")
     add_compile_options(-mfpu=neon)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -mfloat-abi=softfp -mfpu=neon -ftree-vectorize")
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -20,6 +36,20 @@ include_directories("${CMAKE_SOURCE_DIR}/src/platform")
 include_directories("${CMAKE_SOURCE_DIR}/src/utils")
 include_directories("${CMAKE_SOURCE_DIR}/src/isyntax")
 include_directories("${CMAKE_SOURCE_DIR}/src/third_party")
+
+
+# Add threads library for linux
+find_package(Threads REQUIRED)
+
+if(UNIX AND NOT APPLE)
+    set(LIBRT rt)
+endif()
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PIXMAN REQUIRED IMPORTED_TARGET pixman-1)
+
+# Add Pixman include directories to all targets
+include_directories(${PIXMAN_INCLUDE_DIRS})
+
 
 set(LIBISYNTAX_COMMON_SOURCE_FILES
         src/libisyntax.c
@@ -48,6 +78,22 @@ add_executable(isyntax_example
         src/isyntax_example.c
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
+
+target_link_libraries(isyntax_example PRIVATE PkgConfig::PIXMAN Threads::Threads ${LIBRT})
+
+# Find LibTIFF library
+find_package(TIFF REQUIRED)
+if (NOT TIFF_FOUND)
+    message(WARNING "LibTIFF not found")
+    message(WARNING "Will not compile `isyntax-to-tiff` utility")
+else()
+    include_directories(${TIFF_INCLUDE_DIR})
+    add_executable(isyntax-to-tiff
+            src/isyntax_to_tiff.c
+            ${LIBISYNTAX_COMMON_SOURCE_FILES} ${TIFF_LIBRARIES} src/isyntax_to_tiff.c)
+    target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES} PkgConfig::PIXMAN Threads::Threads ${LIBRT})
+endif()
+
 
 if (WIN32)
     target_link_libraries(libisyntax winmm)

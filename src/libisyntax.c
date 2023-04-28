@@ -28,6 +28,7 @@
 #define STB_SPRINTF_IMPLEMENTATION
 #include "stb_sprintf.h"
 
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -38,6 +39,8 @@
 #include "libisyntax.h"
 #include "isyntax.h"
 #include "isyntax_reader.h"
+#include <math.h>
+#include <pixman.h>
 
 static platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
 
@@ -309,6 +312,163 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
     *out_pixels = isyntax_read_tile_bgra(isyntax, isyntax_cache, level, tile_x, tile_y);
     return LIBISYNTAX_OK;
 }
+
+isyntax_error_t libisyntax_read_region_no_offset(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
+
+    // Get the level
+    assert(level < isyntax->images[0].level_count);
+    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
+
+    int32_t tile_width = isyntax->tile_width;
+    int32_t tile_height = isyntax->tile_height;
+
+    int64_t start_tile_x = x / tile_width;
+    int64_t end_tile_x = (x + width - 1) / tile_width;
+    int64_t start_tile_y = y / tile_height;
+    int64_t end_tile_y = (y + height - 1) / tile_height;
+
+    // Allocate memory for region
+    *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
+
+    // Initialize the empty tile as a NULL pointer
+    // TODO: Maybe you want to attach this to some object so we do not need to keep on reallocating these things?
+    uint32_t *empty_tile = NULL;
+
+    // Read tiles and copy the relevant portion of each tile to the region
+    for (int64_t tile_y = start_tile_y; tile_y <= end_tile_y; ++tile_y) {
+        for (int64_t tile_x = start_tile_x; tile_x <= end_tile_x; ++tile_x) {
+            // Calculate the portion of the tile to be copied
+            int64_t src_x = (tile_x == start_tile_x) ? x % tile_width : 0;
+            int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
+            int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - (x % tile_width);
+            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height - (y % tile_height);
+            int64_t copy_width = (tile_x == end_tile_x) ? (x + width - 1) % tile_width - src_x + 1 : tile_width - src_x;
+            int64_t copy_height = (tile_y == end_tile_y) ? (y + height - 1) % tile_height - src_y + 1 : tile_height - src_y;
+
+
+            uint32_t *pixels = NULL;
+
+            int64_t tile_index = tile_y * current_level->width_in_tiles + tile_x;
+            // Check if tile exists, if not, don't use the function to read the tile and immediately return an empty
+            // tile.
+            bool tile_exists = (isyntax->images[0].levels[level].tiles + tile_index)->exists;
+            if (tile_exists) {
+                // Read tile
+                assert(tile_x < current_level->width_in_tiles);
+                assert(tile_y < current_level->height_in_tiles);
+                assert(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, &pixels) == LIBISYNTAX_OK);
+            } else {
+                // Allocate memory for the empty tile and fill it with non-transparent white pixels only when required
+                if (empty_tile == NULL) {
+                    empty_tile = (uint32_t*)malloc(tile_width * tile_height * sizeof(uint32_t));
+                    for (int64_t i = 0; i < tile_height; ++i) {
+                        for (int64_t j = 0; j < tile_width; ++j) {
+                            empty_tile[i * tile_width + j] = 0xFFFFFFFFu; // Could be 0x00FFFFFFu for A=0
+                        }
+                    }
+                }
+                pixels = empty_tile;
+            }
+
+            // Copy the relevant portion of the tile to the region
+            for (int64_t i = 0; i < copy_height; ++i) {
+                int64_t dest_index = (dest_y + i) * width + dest_x;
+                int64_t src_index = (src_y + i) * tile_width + src_x;
+                memcpy((*out_pixels) + dest_index,
+                       pixels + src_index,
+                       copy_width * sizeof(uint32_t));
+            }
+            // Free the tile data if it exists
+            if (pixels != NULL && pixels != empty_tile) {
+                libisyntax_tile_free_pixels(pixels);
+            }
+        }
+    }
+
+    // Free the empty tile data if it was allocated
+    if (empty_tile != NULL) {
+        libisyntax_tile_free_pixels(empty_tile);
+    }
+
+    return LIBISYNTAX_OK;
+}
+
+void crop_image(uint32_t *src, uint32_t *dst, int src_width, int src_height, float x, float y, float crop_width, float crop_height, int output_width, int output_height) {
+    // Create source Pixman image from input BGRA array
+    pixman_image_t *src_image = pixman_image_create_bits(PIXMAN_b8g8r8a8, src_width, src_height, src, src_width * 4);
+
+    // Create destination Pixman image to hold the cropped region
+    pixman_image_t *dst_image = pixman_image_create_bits(PIXMAN_b8g8r8a8, output_width, output_height, dst, output_width * 4);
+
+    // Set transformation matrix to translate and scale the source image
+    pixman_transform_t transform;
+    pixman_transform_init_identity(&transform);
+    pixman_transform_translate(NULL, &transform, pixman_double_to_fixed(-x), pixman_double_to_fixed(-y));
+    pixman_transform_scale(NULL, &transform, pixman_double_to_fixed(output_width / crop_width), pixman_double_to_fixed(output_height / crop_height));
+    pixman_image_set_transform(src_image, &transform);
+
+    // Set bilinear filter for interpolation
+    pixman_image_set_filter(src_image, PIXMAN_FILTER_BILINEAR, NULL, 0);
+
+    // Composite the source image with the destination image using the transformation matrix
+    pixman_image_composite32(PIXMAN_OP_SRC, src_image, NULL, dst_image, 0, 0, 0, 0, 0, 0, output_width, output_height);
+
+    // Copy the cropped data to the destination array
+    memcpy(dst, pixman_image_get_data(dst_image), output_width * output_height * sizeof(uint32_t));
+
+    // Clean up
+    pixman_image_unref(src_image);
+    pixman_image_unref(dst_image);
+}
+
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t** out_pixels) {
+    isyntax_error_t error;
+    isyntax_level_t* current_level = &isyntax->images[0].levels[level];
+
+    int32_t PER_LEVEL_PADDING = 3;
+    float offset = (float)((PER_LEVEL_PADDING << isyntax->images[0].level_count) - PER_LEVEL_PADDING) / current_level->downsample_factor;
+
+    // -1.5 seems to work. TODO(jt): Why??
+    offset -= 1.5f;
+
+    float x_float = (float)x + offset;
+    float y_float = (float)y + offset;
+
+    int64_t larger_x = floor(x_float);
+    int64_t larger_y = floor(y_float);
+
+    // Check if x_float and y_float are integers (their fractional parts are zero)
+    if (larger_x == x_float && larger_y == y_float) {
+        // Read the original shape directly without cropping
+        error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, (int64_t)x_float, (int64_t)y_float, width, height, out_pixels);
+    } else {
+        // Width only needs to be 1 larger for the interpolation
+        int64_t larger_width = width + 1;
+        int64_t larger_height = height + 1;
+
+        // Extract the larger region
+        uint32_t* larger_region_pixels = NULL;
+        error = libisyntax_read_region_no_offset(isyntax, isyntax_cache, level, (int64_t)larger_x, (int64_t)larger_y, larger_width, larger_height, &larger_region_pixels);
+
+        if (error != LIBISYNTAX_OK) {
+            return error;
+        }
+
+        // Allocate memory for the final output region
+        *out_pixels = (uint32_t*)malloc(width * height * sizeof(uint32_t));
+
+        // Crop the larger region to the desired region using the crop_image function
+        crop_image(larger_region_pixels, *out_pixels, larger_width, larger_height, x_float - larger_x, y_float - larger_y, (float)width, (float)height, width, height);
+
+        // Free the memory allocated for the larger region
+        free(larger_region_pixels);
+    }
+
+    return error;
+}
+
 
 void libisyntax_tile_free_pixels(uint32_t* pixels) {
     free(pixels);
