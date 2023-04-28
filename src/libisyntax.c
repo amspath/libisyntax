@@ -168,30 +168,32 @@ static void init_thread_pool() {
 // TODO(avirodov): should make a flag to turn counters off, they may have overhead.
 // TODO(avirodov): struct? move to isyntax.h/.c?
 // TODO(avirodov): debug api?
-// Note: using atomic_fetch_add in case we want to use the _explicit version later on. Could do _counter++.
-#define DBGCTR_COUNT(_counter) atomic_fetch_add(&_counter, 1)
-atomic_int dbgctr_init_thread_pool_counter = 0;
-atomic_int dbgctr_init_global_mutexes_created = 0;
+#define DBGCTR_COUNT(_counter) atomic_increment(&_counter)
+i32 volatile dbgctr_init_thread_pool_counter = 0;
+i32 volatile dbgctr_init_global_mutexes_created = 0;
 
 static benaphore_t* libisyntax_get_global_mutex() {
     static benaphore_t libisyntax_global_mutex;
-    static atomic_int init_status = 0; // 0 - not initialized, 1 - being initialized, 2 - done initializing.
+    static i32 volatile init_status = 0; // 0 - not initialized, 1 - being initialized, 2 - done initializing.
+
+    // Quick path for already initialized scenario.
+    read_barrier;
+    if (init_status == 2) {
+        return &libisyntax_global_mutex;
+    }
 
     // We need to establish a global mutex, and this is nontrivial as mutex primitives available don't allow static
     // initialization (more discussion in https://github.com/amspath/libisyntax/issues/16).
-    int init_status_expected = 0;
-    if (atomic_compare_exchange_strong(&init_status, &init_status_expected, 1)) {
+    if (atomic_compare_exchange(&init_status, 1, 0)) {
         // We get to do the initialization
         libisyntax_global_mutex = benaphore_create();
         DBGCTR_COUNT(dbgctr_init_global_mutexes_created);
-        atomic_store(&init_status, 2);
-    } else if (init_status_expected == 2) {
-        // Initialization done. (This path is a fast path reusing result of atomic_compare_exchange_strong to avoid
-        // an extra atomic_load call in the loop below).
+        init_status = 2;
+        write_barrier;
     } else {
         // Wait until the other thread finishes initialization. Since we don't have a mutex, spinlock is
         // the best we can do here. It should be a very short critical section.
-        while (atomic_load(&init_status) < 2) { /* spin. */ }
+        do { read_barrier; } while(init_status < 2);
     }
 
     return &libisyntax_global_mutex;

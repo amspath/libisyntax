@@ -30,6 +30,10 @@ typedef struct isyntax_image_t isyntax_image_t;
 typedef struct isyntax_level_t isyntax_level_t;
 typedef struct isyntax_cache_t isyntax_cache_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif  // __cplusplus
+
 //== Common API ==
 // TODO(avirodov): are repeated calls of libisyntax_init() allowed? Currently I believe not.
 isyntax_error_t libisyntax_init();
@@ -72,4 +76,6 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
                                      int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels);
 void            libisyntax_tile_free_pixels(uint32_t* pixels);
 
-
+#ifdef __cplusplus
+} // extern "C"
+#endif  // __cplusplus
