@@ -1,3 +1,14 @@
+#include "common.h"
+
+#if WINDOWS
+// TODO(avirodov): enable this test after we figured out cross-platform threading.
+//   More discussion in https://github.com/amspath/libisyntax/issues/16
+int main(void) {
+    printf("Test disabled on windows.");
+    return 0;
+}
+#else
+
 #include <threads.h>
 #include <stdio.h>
 #include <assert.h>
@@ -89,3 +100,5 @@ int main() {
   parallel_run(test_libisyntax_init, NULL, /*force_sync=*/true);
   return 0;
 }
+
+#endif
