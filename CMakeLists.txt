@@ -79,17 +79,13 @@ add_library(libisyntax
         ${LIBISYNTAX_COMMON_SOURCE_FILES}
 )
 
-add_executable(isyntax_example
-        src/isyntax_example.c
-        ${LIBISYNTAX_COMMON_SOURCE_FILES}
-)
-
 if (WIN32)
     target_link_libraries(libisyntax winmm)
-    target_link_libraries(isyntax_example winmm)
 else()
-
 endif()
+
+add_executable(isyntax_example src/isyntax_example.c)
+target_link_libraries(isyntax_example libisyntax)
 
 # TODO(avirodov): Consider moving testing to its own test/CMakeLists. This will require moving the library building
 #   to src/CMakeLists to avoid circular deps.
@@ -130,6 +126,11 @@ if(BUILD_TESTING)
     add_test(NAME regression_example_tile_3_5_10_pixel_check
             COMMAND ${CMAKE_COMMAND} -E compare_files ../test/expected_output/testslide_example_tile_3_5_10.png ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/output_smoke_example_runs_with_test_slide_producing_output.png)
     set_tests_properties(regression_example_tile_3_5_10_pixel_check PROPERTIES DEPENDS smoke_example_runs_with_test_slide_producing_output)
+
+    add_executable(thread_test test/thread_test.c)
+    target_link_libraries(thread_test libisyntax)
+    add_test(NAME smoke_thread_test
+            COMMAND thread_test)
 
 endif() # if(BUILD_TESTING)
 

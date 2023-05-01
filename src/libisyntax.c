@@ -71,11 +71,11 @@ _Noreturn DWORD WINAPI thread_proc(void* parameter) {
 			Sleep(100);
 			continue;
 		}
-		if (!is_queue_work_in_progress(thread_info->queue)) {
+		if (!work_queue_is_work_in_progress(thread_info->queue)) {
 			Sleep(1);
 			WaitForSingleObjectEx(thread_info->queue->semaphore, 1, FALSE);
 		}
-		do_worker_work(thread_info->queue, thread_info->logical_thread_index);
+        work_queue_do_work(thread_info->queue, thread_info->logical_thread_index);
 	}
 }
 
@@ -86,8 +86,8 @@ static void init_thread_pool() {
 	global_worker_thread_count = total_thread_count - 1;
 	global_active_worker_thread_count = global_worker_thread_count;
 
-	global_work_queue = create_work_queue("/worksem", 1024); // Queue for newly submitted tasks
-	global_completion_queue = create_work_queue("/completionsem", 1024); // Message queue for completed tasks
+	global_work_queue = work_queue_create("/worksem", 1024); // Queue for newly submitted tasks
+	global_completion_queue = work_queue_create("/completionsem", 1024); // Message queue for completed tasks
 
 	// NOTE: the main thread is considered thread 0.
 	for (i32 i = 1; i < total_thread_count; ++i) {
@@ -163,10 +163,54 @@ static void init_thread_pool() {
 
 #endif
 
+// TODO(avirodov): int may be too small for some counters later on.
+// TODO(avirodov): should make a flag to turn counters off, they may have overhead.
+// TODO(avirodov): struct? move to isyntax.h/.c?
+// TODO(avirodov): debug api?
+#define DBGCTR_COUNT(_counter) atomic_increment(&_counter)
+i32 volatile dbgctr_init_thread_pool_counter = 0;
+i32 volatile dbgctr_init_global_mutexes_created = 0;
+
+static benaphore_t* libisyntax_get_global_mutex() {
+    static benaphore_t libisyntax_global_mutex;
+    static i32 volatile init_status = 0; // 0 - not initialized, 1 - being initialized, 2 - done initializing.
+
+    // Quick path for already initialized scenario.
+    read_barrier;
+    if (init_status == 2) {
+        return &libisyntax_global_mutex;
+    }
+
+    // We need to establish a global mutex, and this is nontrivial as mutex primitives available don't allow static
+    // initialization (more discussion in https://github.com/amspath/libisyntax/issues/16).
+    if (atomic_compare_exchange(&init_status, 1, 0)) {
+        // We get to do the initialization
+        libisyntax_global_mutex = benaphore_create();
+        DBGCTR_COUNT(dbgctr_init_global_mutexes_created);
+        init_status = 2;
+        write_barrier;
+    } else {
+        // Wait until the other thread finishes initialization. Since we don't have a mutex, spinlock is
+        // the best we can do here. It should be a very short critical section.
+        do { read_barrier; } while(init_status < 2);
+    }
+
+    return &libisyntax_global_mutex;
+}
 
 isyntax_error_t libisyntax_init() {
-	get_system_info(false);
-	init_thread_pool();
+    // Lock-unlock to ensure that all parallel calls to libisyntax_init() wait for the actual initialization to complete.
+    benaphore_lock(libisyntax_get_global_mutex());
+    static bool libisyntax_global_init_complete = false;
+
+    if (libisyntax_global_init_complete == false) {
+        // Actual initialization.
+        get_system_info(false);
+        DBGCTR_COUNT(dbgctr_init_thread_pool_counter);
+        init_thread_pool();
+        libisyntax_global_init_complete = true;
+    }
+    benaphore_unlock(libisyntax_get_global_mutex());
     return LIBISYNTAX_OK;
 }
 
