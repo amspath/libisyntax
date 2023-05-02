@@ -89,7 +89,7 @@ add_executable(isyntax_example src/isyntax_example.c)
 target_link_libraries(isyntax_example libisyntax)
 
 # Find LibTIFF library
-find_package(TIFF REQUIRED)
+find_package(TIFF)
 if (NOT TIFF_FOUND)
     message(WARNING "LibTIFF not found")
     message(WARNING "Will not compile `isyntax-to-tiff` utility")
