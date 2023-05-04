@@ -292,7 +292,8 @@ typedef struct isyntax_level_t {
 
 typedef struct isyntax_image_t {
 	u32 image_type;
-	u8* pixels;
+    u8* jpeg_compressed_pixels;
+    size_t jpeg_compressed_len;
 	i32 width;
 	i32 height;
 	i32 width_minus_padding;
@@ -403,6 +404,7 @@ u32 isyntax_get_adjacent_tiles_mask_only_existing(isyntax_level_t* level, i32 ti
 u32 isyntax_idwt_tile_for_color_channel(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y, i32 color, icoeff_t* dest_buffer);
 void isyntax_decompress_codeblock_in_chunk(isyntax_codeblock_t* codeblock, i32 block_width, i32 block_height, u8* chunk, u64 chunk_base_offset, i32 compressor_version, i16* out_buffer);
 i32 isyntax_get_chunk_codeblocks_per_color_for_level(i32 level, bool has_ll);
+u8* isyntax_get_associated_image_pixels(isyntax_image_t* image, enum isyntax_pixel_format_t pixel_format);
 
 
 #ifdef __cplusplus
