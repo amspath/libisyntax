@@ -374,6 +374,10 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t* pixels_buffer,
                                        int32_t pixel_format) {
 
+    if (pixel_format <= _LIBISYNTAX_PIXEL_FORMAT_START || pixel_format >= _LIBISYNTAX_PIXEL_FORMAT_END) {
+        return LIBISYNTAX_INVALID_ARGUMENT;
+    }
+
     // Get the level
     ASSERT(level < isyntax->images[0].level_count);
     isyntax_level_t* current_level = &isyntax->images[0].levels[level];
@@ -408,7 +412,7 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
             int64_t copy_height = (tile_y == end_tile_y) ? (y + height - 1) % tile_height - src_y + 1 : tile_height - src_y;
 
             // Read tile
-            // TODO(pvalkema): be rob
+            // TODO(pvalkema): be more robust here
             ASSERT(tile_x < current_level->width_in_tiles);
             ASSERT(tile_y < current_level->height_in_tiles);
             CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, tile_pixels, pixel_format));
@@ -427,4 +431,29 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     free(tile_pixels);
 
     return LIBISYNTAX_OK;
+}
+
+static isyntax_error_t libisyntax_read_associated_image(isyntax_image_t* image, int32_t* width, int32_t* height,
+                                                        uint32_t** pixels_buffer, int32_t pixel_format) {
+    if (pixel_format <= _LIBISYNTAX_PIXEL_FORMAT_START || pixel_format >= _LIBISYNTAX_PIXEL_FORMAT_END) {
+        return LIBISYNTAX_INVALID_ARGUMENT;
+    }
+    uint32_t* pixels = (uint32_t*)isyntax_get_associated_image_pixels(image, pixel_format);
+    // NOTE: the width and height are only known AFTER the decoding.
+    if (width) *width = image->width;
+    if (height) *height = image->height;
+    if (pixels_buffer) *pixels_buffer = pixels;
+    return LIBISYNTAX_OK;
+}
+
+isyntax_error_t libisyntax_read_label_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
+                                            uint32_t** pixels_buffer, int32_t pixel_format) {
+    isyntax_image_t* label_image = isyntax->images + isyntax->label_image_index;
+    return libisyntax_read_associated_image(label_image, width, height, pixels_buffer, pixel_format);
+}
+
+isyntax_error_t libisyntax_read_macro_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
+                                            uint32_t** pixels_buffer, int32_t pixel_format) {
+    isyntax_image_t* macro_image = isyntax->images + isyntax->macro_image_index;
+    return libisyntax_read_associated_image(macro_image, width, height, pixels_buffer, pixel_format);
 }

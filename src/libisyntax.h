@@ -84,3 +84,8 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
                                        int32_t pixel_format);
 
 
+isyntax_error_t libisyntax_read_label_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
+                                                   uint32_t** pixels_buffer, int32_t pixel_format);
+isyntax_error_t libisyntax_read_macro_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
+                                                   uint32_t** pixels_buffer, int32_t pixel_format);
+
