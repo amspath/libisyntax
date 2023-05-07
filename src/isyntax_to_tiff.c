@@ -67,47 +67,23 @@ void update_progress(int32_t total_progress, int32_t page_progress, int32_t page
     fflush(stdout);
 }
 
-void bgra_to_rgba(uint32_t *pixels, int tile_width, int tile_height) {
-    int num_pixels = tile_width * tile_height;
-    int num_pixels_aligned = (num_pixels / 4) * 4;
-
-#if defined(__ARM_NEON)
-    for (int i = 0; i < num_pixels_aligned; i += 4) {
-        uint32x4_t bgra = vld1q_u32(pixels + i);
-        uint32x4_t b_mask = vdupq_n_u32(0x000000FF);
-        uint32x4_t r_mask = vdupq_n_u32(0x00FF0000);
-        uint32x4_t b = vandq_u32(bgra, b_mask);
-        uint32x4_t r = vandq_u32(bgra, r_mask);
-        uint32x4_t br_swapped = vorrq_u32(vshlq_n_u32(b, 16), vshrq_n_u32(r, 16));
-        uint32x4_t ga_alpha_mask = vdupq_n_u32(0xFF00FF00);
-        uint32x4_t ga_alpha = vandq_u32(bgra, ga_alpha_mask);
-        uint32x4_t rgba = vorrq_u32(ga_alpha, br_swapped);
-        vst1q_u32(pixels + i, rgba);
-    }
-#elif defined(__SSE2__)
-    for (int i = 0; i < num_pixels_aligned; i += 4) {
-        __m128i bgra = _mm_loadu_si128((__m128i*)(pixels + i));
-        __m128i b_mask = _mm_set1_epi32(0x000000FF);
-        __m128i r_mask = _mm_set1_epi32(0x00FF0000);
-        __m128i b = _mm_and_si128(bgra, b_mask);
-        __m128i r = _mm_and_si128(bgra, r_mask);
-        __m128i br_swapped = _mm_or_si128(_mm_slli_epi32(b, 16), _mm_srli_epi32(r, 16));
-        __m128i ga_alpha_mask = _mm_set1_epi32(0xFF00FF00);
-        __m128i ga_alpha = _mm_and_si128(bgra, ga_alpha_mask);
-        __m128i rgba = _mm_or_si128(ga_alpha, br_swapped);
-        _mm_storeu_si128((__m128i*)(pixels + i), rgba);
-    }
-#else
-    for (int i = num_pixels_aligned; i < num_pixels; ++i) {
-        uint32_t val = pixels[i];
-        pixels[i] = ((val & 0xff) << 16) | (val & 0x00ff00) | ((val & 0xff0000) >> 16) | (val & 0xff000000);
-    }
-#endif
+void rgba_to_rgb(uint32_t *pixels, int width, int height, uint8_t* out_pixels) {
+	int num_pixels = width * height;
+	uint8_t* src_pos = (uint8_t*)pixels;
+	uint8_t* dst_pos = out_pixels;
+	for (int i = 0; i < num_pixels; ++i) {
+		dst_pos[0] = src_pos[0];
+		dst_pos[1] = src_pos[1];
+		dst_pos[2] = src_pos[2];
+		dst_pos += 3;
+		src_pos += 4;
+	}
 }
 
-void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *isyntax_cache, isyntax_level_t *level,
+void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *isyntax_cache, const isyntax_level_t *level,
                         int32_t tile_width, int32_t tile_height, int32_t *total_tiles_written, int32_t total_tiles,
-                        clock_t global_start_time, uint16_t compression_type, uint16_t quality) {
+                        clock_t global_start_time, uint16_t compression_type, uint16_t quality,
+						uint32_t photometric_interpretation, int32_t samples_per_pixel) {
     int32_t width = libisyntax_level_get_width(level);
     int32_t height = libisyntax_level_get_height(level);
     int32_t scale = libisyntax_level_get_scale(level);
@@ -116,7 +92,7 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
     TIFFSetField(output_tiff, TIFFTAG_IMAGEWIDTH, width);
     TIFFSetField(output_tiff, TIFFTAG_IMAGELENGTH, height);
     TIFFSetField(output_tiff, TIFFTAG_BITSPERSAMPLE, 8);
-    TIFFSetField(output_tiff, TIFFTAG_SAMPLESPERPIXEL, 4);
+    TIFFSetField(output_tiff, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
 
     if (compression_type == COMPRESSION_JPEG) {
         TIFFSetField(output_tiff, TIFFTAG_COMPRESSION, COMPRESSION_JPEG);
@@ -125,8 +101,19 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
         TIFFSetField(output_tiff, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
     }
 
-    // TODO(pvalkema): allow PHOTOMETRIC_YCBCR
-    TIFFSetField(output_tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+	if (compression_type == COMPRESSION_JPEG && photometric_interpretation == PHOTOMETRIC_YCBCR) {
+		TIFFSetField(output_tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_YCBCR);
+		TIFFSetField(output_tiff, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB); // Pseudo-tag: convert to/from RGB
+	} else {
+		TIFFSetField(output_tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+	}
+
+	assert(samples_per_pixel == 3 || samples_per_pixel == 4);
+	if (samples_per_pixel == 4) {
+		// Extra sample is interpreted as alpha channel
+		TIFFSetField(output_tiff, TIFFTAG_EXTRASAMPLES, 1, (uint16_t[]) {EXTRASAMPLE_ASSOCALPHA});
+	}
+
     TIFFSetField(output_tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
     TIFFSetField(output_tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
     TIFFSetField(output_tiff, TIFFTAG_TILEWIDTH, tile_width);
@@ -138,8 +125,6 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
     double res_y = 10000.0 / libisyntax_level_get_mpp_y(level);
     TIFFSetField(output_tiff, TIFFTAG_YRESOLUTION, res_y);
     TIFFSetField(output_tiff, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
-    // TODO(pvalkema): should we discard the alpha channel?
-    TIFFSetField(output_tiff, TIFFTAG_EXTRASAMPLES, 1, (uint16_t[]) {EXTRASAMPLE_UNASSALPHA});
 
     if (scale == 0) {
         TIFFSetField(output_tiff, TIFFTAG_SUBFILETYPE, 0);
@@ -156,6 +141,12 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
     // Allocate enough memory to be able to convert a smaller region to a full tile
     uint32_t* full_tile_pixels = (uint32_t*)malloc(tile_width * tile_height * sizeof(uint32_t));
+
+	uint8_t* tile_pixels_rgb = NULL;
+	if (samples_per_pixel == 3) {
+		// Allocate memory for RGB pixels (without alpha channel)
+		tile_pixels_rgb = (uint8_t*)malloc(tile_width * tile_height * 3);
+	}
 
     for (int32_t y_coord = 0; y_coord < height; y_coord += tile_height) {
         for (int32_t x_coord = 0; x_coord < width; x_coord += tile_width) {
@@ -174,17 +165,24 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
                                           region_pixels, LIBISYNTAX_PIXEL_FORMAT_RGBA));
 
             // In case our actual tile is smaller, we need to convert it to a full tile.
-            uint32_t* final_tile_pixels = NULL;
+            uint32_t* final_tile_pixels_rgba = NULL;
             if (region_width != tile_width || region_height != tile_height) {
                 memset(full_tile_pixels, 0xFF, tile_width * tile_height * sizeof(uint32_t));
                 for (int32_t row = 0; row < region_height; ++row) {
                     memcpy(full_tile_pixels + row * tile_width, region_pixels + row * region_width,
                            region_width * sizeof(uint32_t));
                 }
-                final_tile_pixels = full_tile_pixels;
+	            final_tile_pixels_rgba = full_tile_pixels;
             } else {
-                final_tile_pixels = region_pixels;
+	            final_tile_pixels_rgba = region_pixels;
             }
+
+			uint8_t* final_tile_pixels = (uint8_t*)final_tile_pixels_rgba;
+	        if (samples_per_pixel == 3) {
+		        // Convert RGBA to RGB (discard alpha channel).
+		        rgba_to_rgb(final_tile_pixels_rgba, tile_width, tile_height, tile_pixels_rgb);
+				final_tile_pixels = tile_pixels_rgb;
+			}
 
             // Write the tile to the output TIFF.
             TIFFWriteTile(output_tiff, final_tile_pixels, x_coord, y_coord, 0, 0);
@@ -204,6 +202,7 @@ void write_page_to_tiff(TIFF *output_tiff, isyntax_t *isyntax, isyntax_cache_t *
 
     free(full_tile_pixels);
     free(region_pixels);
+	if (tile_pixels_rgb) free(tile_pixels_rgb);
 
     // Write the directory for the current level.
     TIFFWriteDirectory(output_tiff);
@@ -241,7 +240,7 @@ uint64_t parse_cache_size(const char *size_str) {
 
 int main(int argc, char **argv) {
     const char *usage_string =
-            "Usage: isyntax-to-tiff [OPTIONS] INPUT OUTPUT\n\n"
+            "Usage: isyntax-to-tiff INPUT OUTPUT [OPTIONS]\n\n"
             "Converts Philips iSyntax files to a multi-resolution BigTIFF file.\n\n"
             "Positional arguments:\n"
             "  INPUT                 Path to the input iSyntax file.\n"
@@ -255,11 +254,15 @@ int main(int argc, char **argv) {
             "                        Supported types: JPEG, LZW, NONE (default: JPEG).\n\n"
             "  --quality VALUE       Specifies the quality for JPEG compression (0-100).\n"
             "                        Only applicable when using JPEG compression (default: 80).\n\n"
+            "  --color-space TYPE    Specifies the color space for the output TIFF.\n"
+			"                        Only applicable when using JPEG compression.\n"
+            "                        Supported types: YCbCr, RGB (default: YCbCr).\n\n"
+			"  --add-alpha 0|1       Specifies whether to add an alpha channel (default: 0).\n\n"
             "  --cache-size SIZE     Specifies the cache size for the iSyntax library.\n"
             "                        Accepts a number followed by 'M' (for megabytes) or 'G' (for gigabytes),\n"
             "                        or just a number for kilobytes (default: 2000).\n\n"
             "Example:\n\n"
-            "  isyntax-to-tiff --tile-size 512 --compression JPEG --quality 90 --cache-size 1G input.isyntax output.tiff\n\n"
+            "  isyntax-to-tiff input.isyntax output.tiff --tile-size 512 --compression JPEG --quality 90 --cache-size 1G \n\n"
             "This command will convert the input.isyntax file into an output.tiff file with a tile size of 512, JPEG compression at 90 quality, and a cache size of 1 gigabyte.\n";
 
     if (argc < 3) {
@@ -277,6 +280,8 @@ int main(int argc, char **argv) {
 
     int compression_type = COMPRESSION_JPEG;
     int quality = 80;
+	uint32_t photometric_interpretation = PHOTOMETRIC_YCBCR;
+	int samples_per_pixel = 3;
 
     for (int i = 3; i < argc; ++i) {
         if (strcmp(argv[i], "--tile-size") == 0) {
@@ -351,11 +356,50 @@ int main(int argc, char **argv) {
                 return -1;
             }
 
+        } else if (strcmp(argv[i], "--color-space") == 0) {
+	        if (i + 1 < argc) {
+		        if (strcasecmp(argv[i + 1], "YCbCr") == 0) {
+			        photometric_interpretation = PHOTOMETRIC_YCBCR;
+		        } else if (strcmp(argv[i + 1], "RGB") == 0) {
+			        photometric_interpretation = PHOTOMETRIC_RGB;
+		        } else {
+			        printf("Error: Invalid color space. Supported types are YCbCr and RGB.\n");
+			        return -1;
+		        }
+		        i++; // Skip the next argument (color space value)
+	        } else {
+		        printf("Error: Missing value for --color-space option.\n");
+		        return -1;
+	        }
+        } else if (strcmp(argv[i], "--add-alpha") == 0) {
+	        if (i + 1 < argc) {
+		        if (strcasecmp(argv[i + 1], "0") == 0) {
+			        samples_per_pixel = 3;
+		        } else if (strcmp(argv[i + 1], "1") == 0) {
+			        samples_per_pixel = 4;
+		        } else {
+			        printf("Error: Invalid value for --add-alpha option. Please provide 0 or 1.\n");
+			        return -1;
+		        }
+		        i++; // Skip the next argument (add alpha type value)
+	        } else {
+		        printf("Error: Missing value for --add-alpha option.\n");
+		        return -1;
+	        }
         } else {
             printf("Error: Unknown option %s\n", argv[i]);
             return -1;
         }
     }
+
+	if (samples_per_pixel == 4 && compression_type == COMPRESSION_JPEG && photometric_interpretation == PHOTOMETRIC_YCBCR) {
+		// This combination unfortunately will cause errors during encoding: "JPEGLib: Bogus input colorspace."
+		printf("Warning: The --add-alpha option does not work when using JPEG compression with the YCbCr color space.\n"
+			   "To add an alpha channel, either use the RGB color space or pick another compression type.\n"
+			   "Alpha channel will be disabled.\n");
+		samples_per_pixel = 3;
+	}
+
     int32_t tile_width = tile_size;
     int32_t tile_height = tile_size;
 
@@ -406,7 +450,7 @@ int main(int argc, char **argv) {
 
     // Let's find the total number of tiles so we can have a progress counter
     for (int32_t level = start_at_page; level < num_levels; ++level) {
-        isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
+        const isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
         int32_t width = libisyntax_level_get_width(current_level);
         int32_t height = libisyntax_level_get_height(current_level);
         int32_t tiles_in_page = ((height + tile_height - 1) / tile_height) * ((width + tile_width - 1) / tile_width);
@@ -417,9 +461,10 @@ int main(int argc, char **argv) {
     int32_t total_tiles_written = 0;
     clock_t global_start_time = clock();
     for (int32_t level = start_at_page; level < num_levels; ++level) {
-        isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
+        const isyntax_level_t *current_level = libisyntax_image_get_level(image, level);
         write_page_to_tiff(output_tiff, isyntax, isyntax_cache, current_level, tile_width, tile_height,
-                           &total_tiles_written, total_tiles, global_start_time, compression_type, quality);
+                           &total_tiles_written, total_tiles, global_start_time, compression_type, quality,
+						   photometric_interpretation, samples_per_pixel);
     }
 
     // Close the output TIFF file.
