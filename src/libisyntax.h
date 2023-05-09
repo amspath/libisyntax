@@ -13,6 +13,7 @@
 //   is: libisyntax_<object>_<action>(..), where <object> is omitted for the object representing the isyntax file.
 // - Functions don't check for null/out of bounds, for efficiency. (they may assert, but that is implementation detail).
 // - Booleans are represented as int32_t and prefxied with 'is_' or 'has_'.
+// - Enums are represented as int32_t and not the enum type. (enum type size forcing is C23 or C++11).
 // - Const applied to pointers is used as a signal that the object will not be modified.
 // - Prefer int even for unsigned types, see java rationale.
 // - Prefer double over float - we are dealing with small/large scales in WSI, and float may not be enough.
@@ -26,14 +27,21 @@ typedef int32_t isyntax_error_t;
 // One of the arguments passed to a function is invalid.
 #define LIBISYNTAX_INVALID_ARGUMENT 2
 
+enum isyntax_pixel_format_t {
+  _LIBISYNTAX_PIXEL_FORMAT_START = 0x100,
+  LIBISYNTAX_PIXEL_FORMAT_RGBA,
+  LIBISYNTAX_PIXEL_FORMAT_BGRA,
+  _LIBISYNTAX_PIXEL_FORMAT_END,
+};
+
 typedef struct isyntax_t isyntax_t;
 typedef struct isyntax_image_t isyntax_image_t;
 typedef struct isyntax_level_t isyntax_level_t;
 typedef struct isyntax_cache_t isyntax_cache_t;
 
 //== Common API ==
-// TODO(avirodov): is libisyntax_init thread-safe? Maybe need a general api-level statement about thread-safety.
-isyntax_error_t libisyntax_init(void);
+// libisyntax_init() is thread-safe. Multiple calls are allowed. All calls will block until initialization is complete.
+isyntax_error_t libisyntax_init();
 isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax);
 void            libisyntax_close(isyntax_t* isyntax);
 
@@ -54,6 +62,10 @@ int32_t                libisyntax_level_get_width_in_tiles(const isyntax_level_t
 int32_t                libisyntax_level_get_height_in_tiles(const isyntax_level_t* level);
 double                 libisyntax_level_get_downsample_factor(const isyntax_level_t* level);
 double                 libisyntax_level_get_origin_offset_in_pixels(const isyntax_level_t* level);
+int32_t                libisyntax_level_get_width(const isyntax_level_t* level);
+int32_t                libisyntax_level_get_height(const isyntax_level_t* level);
+float                  libisyntax_level_get_mpp_x(const isyntax_level_t* level);
+float                  libisyntax_level_get_mpp_y(const isyntax_level_t* level);
 
 //== Cache API ==
 isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t cache_size,
@@ -70,10 +82,20 @@ void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 
 
 //== Tile API ==
-// Note: pixels are in BGRA layout.
-// Note: must use libisyntax_tile_free_pixels() to free out_pixels.
+// Reads a tile into a user-supplied buffer. Buffer size should be [tile_width * tile_height * 4], as returned by
+// `libisyntax_get_tile_width()`/`libisyntax_get_tile_height()`. The caller is responsible for managing the buffer
+// allocation/deallocation.
+// pixel_format is one of isyntax_pixel_format_t.
 isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
-                                     int32_t level, int64_t tile_x, int64_t tile_y, uint32_t** out_pixels);
-void            libisyntax_tile_free_pixels(uint32_t* pixels);
+                                     int32_t level, int64_t tile_x, int64_t tile_y,
+                                     uint32_t* pixels_buffer, int32_t pixel_format);
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+                                       int64_t x, int64_t y, int64_t width, int64_t height, uint32_t* pixels_buffer,
+                                       int32_t pixel_format);
 
+
+isyntax_error_t libisyntax_read_label_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
+                                                   uint32_t** pixels_buffer, int32_t pixel_format);
+isyntax_error_t libisyntax_read_macro_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
+                                                   uint32_t** pixels_buffer, int32_t pixel_format);
 

@@ -91,42 +91,47 @@ bool is_directory(const char* path) {
 
 
 void get_system_info(bool verbose) {
+    system_info_t system_info = {0};
 #if WINDOWS
-    SYSTEM_INFO system_info;
-    GetSystemInfo(&system_info);
-	logical_cpu_count = (i32)system_info.dwNumberOfProcessors;
-	physical_cpu_count = logical_cpu_count; // TODO: how to read this on Windows?
-	os_page_size = system_info.dwPageSize;
+    SYSTEM_INFO win32_system_info;
+    GetSystemInfo(&win32_system_info);
+	system_info.logical_cpu_count = (i32)win32_system_info.dwNumberOfProcessors;
+	system_info.physical_cpu_count = system_info.logical_cpu_count; // TODO(pvalkema): how to read this on Windows?
+	system_info.os_page_size = win32_system_info.dwPageSize;
 #elif APPLE
-    size_t physical_cpu_count_len = sizeof(physical_cpu_count);
-	size_t logical_cpu_count_len = sizeof(logical_cpu_count);
-	sysctlbyname("hw.physicalcpu", &physical_cpu_count, &physical_cpu_count_len, NULL, 0);
-	sysctlbyname("hw.logicalcpu", &logical_cpu_count, &logical_cpu_count_len, NULL, 0);
-	os_page_size = (u32) getpagesize();
-	page_alignment_mask = ~((u64)(sysconf(_SC_PAGE_SIZE) - 1));
-	is_macos = true;
+    size_t physical_cpu_count_len = sizeof(system_info.physical_cpu_count);
+	size_t logical_cpu_count_len = sizeof(system_info.logical_cpu_count);
+	sysctlbyname("hw.physicalcpu", &system_info.physical_cpu_count, &physical_cpu_count_len, NULL, 0);
+	sysctlbyname("hw.logicalcpu", &system_info.logical_cpu_count, &logical_cpu_count_len, NULL, 0);
+    system_info.os_page_size = (u32) getpagesize();
+    system_info.page_alignment_mask = ~((u64)(sysconf(_SC_PAGE_SIZE) - 1));
+    system_info.is_macos = true;
 #elif LINUX
-    logical_cpu_count = sysconf( _SC_NPROCESSORS_ONLN );
-    physical_cpu_count = logical_cpu_count; // TODO: how to read this on Linux?
-    os_page_size = (u32) getpagesize();
-    page_alignment_mask = ~((u64)(sysconf(_SC_PAGE_SIZE) - 1));
+    system_info.logical_cpu_count = sysconf( _SC_NPROCESSORS_ONLN );
+    system_info.physical_cpu_count = system_info.logical_cpu_count; // TODO(pvalkema): how to read this on Linux?
+    system_info.os_page_size = (u32) getpagesize();
+    system_info.page_alignment_mask = ~((u64)(sysconf(_SC_PAGE_SIZE) - 1));
 #endif
-    if (verbose) console_print("There are %d logical CPU cores\n", logical_cpu_count);
-    total_thread_count = MIN(logical_cpu_count, MAX_THREAD_COUNT);
+    if (verbose) console_print("There are %d logical CPU cores\n", system_info.logical_cpu_count);
+    system_info.suggested_total_thread_count = MIN(system_info.logical_cpu_count, MAX_THREAD_COUNT);
+
+    //TODO(pvalkema): think about returning this instead of setting global state.
+    global_system_info = system_info;
 }
 
 
-void init_thread_memory(i32 logical_thread_index) {
+void init_thread_memory(i32 logical_thread_index, system_info_t* system_info) {
 	// Allocate a private memory buffer
 	u64 thread_memory_size = MEGABYTES(16);
 	local_thread_memory = (thread_memory_t*) malloc(thread_memory_size); // how much actually needed?
 	thread_memory_t* thread_memory = local_thread_memory;
 	memset(thread_memory, 0, sizeof(thread_memory_t));
 #if !WINDOWS
-	// TODO: implement creation of async I/O events
+	// TODO(pvalkema): think about whether implement creation of async I/O events is needed here
 #endif
 	thread_memory->thread_memory_raw_size = thread_memory_size;
 
+    u32 os_page_size = system_info->os_page_size;
 	thread_memory->aligned_rest_of_thread_memory = (void*)
 			((((u64)thread_memory + sizeof(thread_memory_t) + os_page_size - 1) / os_page_size) * os_page_size); // round up to next page boundary
 	thread_memory->thread_memory_usable_size = thread_memory_size - ((u64)thread_memory->aligned_rest_of_thread_memory - (u64)thread_memory);

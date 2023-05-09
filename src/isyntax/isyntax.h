@@ -33,6 +33,7 @@ extern "C" {
 
 #include "common.h"
 //#include "platform.h"
+#include "libisyntax.h"
 #include "block_allocator.h"
 #include "work_queue.h"
 
@@ -275,13 +276,15 @@ typedef struct isyntax_level_t {
 	i32 scale;
 	i32 width_in_tiles;
 	i32 height_in_tiles;
+	i32 width_minus_padding;
+	i32 height_minus_padding;
 	float downsample_factor;
 	float um_per_pixel_x;
 	float um_per_pixel_y;
 	float x_tile_side_in_um;
 	float y_tile_side_in_um;
 	u64 tile_count;
-	float origin_offset_in_pixels;
+	i32 origin_offset_in_pixels;
 	v2f origin_offset;
 	isyntax_tile_t* tiles;
 	bool is_fully_loaded;
@@ -289,9 +292,12 @@ typedef struct isyntax_level_t {
 
 typedef struct isyntax_image_t {
 	u32 image_type;
-	u8* pixels;
+    u8* jpeg_compressed_pixels;
+    size_t jpeg_compressed_len;
 	i32 width;
 	i32 height;
+	i32 width_minus_padding;
+	i32 height_minus_padding;
 	i32 offset_x;
 	i32 offset_y;
 	i32 level_count;
@@ -391,16 +397,15 @@ void isyntax_set_work_queue(isyntax_t* isyntax, work_queue_t* work_queue);
 bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators);
 void isyntax_destroy(isyntax_t* isyntax);
 void isyntax_idwt(icoeff_t* idwt, i32 quadrant_width, i32 quadrant_height, bool output_steps_as_png, const char* png_name);
-u32* isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y, block_allocator_t* ll_coeff_block_allocator, bool decode_rgb);
+void isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y, block_allocator_t* ll_coeff_block_allocator,
+                       u32* out_buffer_or_null, enum isyntax_pixel_format_t pixel_format);
 u32 isyntax_get_adjacent_tiles_mask(isyntax_level_t* level, i32 tile_x, i32 tile_y);
 u32 isyntax_get_adjacent_tiles_mask_only_existing(isyntax_level_t* level, i32 tile_x, i32 tile_y);
 u32 isyntax_idwt_tile_for_color_channel(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y, i32 color, icoeff_t* dest_buffer);
 void isyntax_decompress_codeblock_in_chunk(isyntax_codeblock_t* codeblock, i32 block_width, i32 block_height, u8* chunk, u64 chunk_base_offset, i32 compressor_version, i16* out_buffer);
 i32 isyntax_get_chunk_codeblocks_per_color_for_level(i32 level, bool has_ll);
+u8* isyntax_get_associated_image_pixels(isyntax_image_t* image, enum isyntax_pixel_format_t pixel_format);
 
-// TODO: move this somewhere suitable
-void isyntax_begin_first_load(i32 resource_id, isyntax_t* isyntax, isyntax_image_t* wsi_image);
-void isyntax_begin_load_tile(i32 resource_id, isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y);
 
 #ifdef __cplusplus
 }

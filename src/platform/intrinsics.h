@@ -249,10 +249,7 @@ static inline u64 maybe_swap_64(u64 x, bool32 is_big_endian) {
 
 #if APPLE_ARM
 static inline i32 popcount(u32 x) {
-    int c = 0;
-    for (; x != 0; x &= x - 1)
-        c++;
-    return c;
+    return __builtin_popcount(x);
 }
 #elif COMPILER_MSVC
 static inline i32 popcount(u32 x) {
