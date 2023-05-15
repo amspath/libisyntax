@@ -433,12 +433,13 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     return LIBISYNTAX_OK;
 }
 
-static isyntax_error_t libisyntax_read_associated_image(isyntax_image_t* image, int32_t* width, int32_t* height,
+// TODO(pvalkema): remove this / only support returning compressed JPEG buffer and leave decompression to caller?
+static isyntax_error_t libisyntax_read_associated_image(isyntax_t* isyntax, isyntax_image_t* image, int32_t* width, int32_t* height,
                                                         uint32_t** pixels_buffer, int32_t pixel_format) {
     if (pixel_format <= _LIBISYNTAX_PIXEL_FORMAT_START || pixel_format >= _LIBISYNTAX_PIXEL_FORMAT_END) {
         return LIBISYNTAX_INVALID_ARGUMENT;
     }
-    uint32_t* pixels = (uint32_t*)isyntax_get_associated_image_pixels(image, pixel_format);
+    uint32_t* pixels = (uint32_t*)isyntax_get_associated_image_pixels(isyntax, image, pixel_format);
     // NOTE: the width and height are only known AFTER the decoding.
     if (width) *width = image->width;
     if (height) *height = image->height;
@@ -449,11 +450,33 @@ static isyntax_error_t libisyntax_read_associated_image(isyntax_image_t* image, 
 isyntax_error_t libisyntax_read_label_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
                                             uint32_t** pixels_buffer, int32_t pixel_format) {
     isyntax_image_t* label_image = isyntax->images + isyntax->label_image_index;
-    return libisyntax_read_associated_image(label_image, width, height, pixels_buffer, pixel_format);
+    return libisyntax_read_associated_image(isyntax, label_image, width, height, pixels_buffer, pixel_format);
 }
 
 isyntax_error_t libisyntax_read_macro_image(isyntax_t* isyntax, int32_t* width, int32_t* height,
                                             uint32_t** pixels_buffer, int32_t pixel_format) {
     isyntax_image_t* macro_image = isyntax->images + isyntax->macro_image_index;
-    return libisyntax_read_associated_image(macro_image, width, height, pixels_buffer, pixel_format);
+    return libisyntax_read_associated_image(isyntax, macro_image, width, height, pixels_buffer, pixel_format);
+}
+
+static isyntax_error_t libisyntax_read_assocatiated_image_jpeg(isyntax_t* isyntax, isyntax_image_t* image, uint8_t** jpeg_buffer, uint32_t* jpeg_size) {
+    ASSERT(jpeg_buffer);
+    ASSERT(jpeg_size);
+    u8* jpeg_compressed = isyntax_get_associated_image_jpeg(isyntax, image, jpeg_size);
+    if (jpeg_compressed) {
+        *jpeg_buffer = jpeg_compressed;
+        return LIBISYNTAX_OK;
+    } else {
+        return LIBISYNTAX_FATAL;
+    }
+}
+
+isyntax_error_t libisyntax_read_label_image_jpeg(isyntax_t* isyntax, uint8_t** jpeg_buffer, uint32_t* jpeg_size) {
+    isyntax_image_t* label_image = isyntax->images + isyntax->label_image_index;
+    return libisyntax_read_assocatiated_image_jpeg(isyntax, label_image, jpeg_buffer, jpeg_size);
+}
+
+isyntax_error_t libisyntax_read_macro_image_jpeg(isyntax_t* isyntax, uint8_t** jpeg_buffer, uint32_t* jpeg_size) {
+    isyntax_image_t* macro_image = isyntax->images + isyntax->macro_image_index;
+    return libisyntax_read_assocatiated_image_jpeg(isyntax, macro_image, jpeg_buffer, jpeg_size);
 }

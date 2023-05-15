@@ -268,11 +268,43 @@ static u8* isyntax_decode_jpeg_stream(u8* compressed, size_t compressed_len, i32
     return pixels;
 }
 
-u8* isyntax_get_associated_image_pixels(isyntax_image_t* image, enum isyntax_pixel_format_t pixel_format) {
+// Read base64-encoded label or macro image from file and return decompressed pixels.
+// TODO(pvalkema): remove this / only support returning compressed JPEG buffer and leave decompression to caller?
+u8* isyntax_get_associated_image_pixels(isyntax_t* isyntax, isyntax_image_t* image, enum isyntax_pixel_format_t pixel_format) {
+    u8* decompressed = NULL;
     i32 channels_in_file = 0;
-    return isyntax_decode_jpeg_stream(image->jpeg_compressed_pixels,
-                                      image->jpeg_compressed_len, &image->width, &image->height,
-                                      &channels_in_file, pixel_format);
+    u32 jpeg_compressed_len = 0;
+    u8* jpeg_compressed = isyntax_get_associated_image_jpeg(isyntax, image, &jpeg_compressed_len);
+    if (jpeg_compressed) {
+        decompressed = isyntax_decode_jpeg_stream(jpeg_compressed, jpeg_compressed_len,
+                                                  &image->width, &image->height, &channels_in_file, pixel_format);
+        free(jpeg_compressed);
+    }
+    return decompressed;
+}
+
+// Read base64-encoded label or macro image from file and return the decoded (still JPEG-compressed) image,
+// writing the length of the JPEG buffer into jpeg_size.
+u8* isyntax_get_associated_image_jpeg(isyntax_t* isyntax, isyntax_image_t* image, u32* jpeg_size) {
+    if (jpeg_size == NULL) {
+        return NULL;
+    }
+    i64 read_offset = image->base64_encoded_jpg_file_offset;
+    size_t read_size = image->base64_encoded_jpg_len;
+    u8* decoded = NULL;
+    if (read_offset > 0 && read_size > 0) {
+        u8* encoded = malloc(read_size);
+        size_t bytes_read = file_handle_read_at_offset(encoded, isyntax->file_handle, read_offset, read_size);
+        if (bytes_read == read_size) {
+            size_t len = 0;
+            decoded = base64_decode((u8*)encoded, read_size, &len);
+            if (decoded) {
+                *jpeg_size = len;
+            }
+        }
+        free(encoded);
+    }
+    return decoded;
 }
 
 static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u32 element, char* value, u64 value_len) {
@@ -401,8 +433,8 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 					if (last_char == '/') {
 						value_len--; // The last character may cause the base64 decoding to fail if invalid
 					}
-					image->jpeg_compressed_pixels = base64_decode((u8*)value, value_len, &decoded_len);
-                    image->jpeg_compressed_len = decoded_len;
+                    image->base64_encoded_jpg_file_offset = isyntax->parser.content_file_offset;
+                    image->base64_encoded_jpg_len = value_len;
 				} break;
 				case 0x1013: /*DP_COLOR_MANAGEMENT*/                        {} break;
 				case 0x1014: /*DP_IMAGE_POST_PROCESSING*/                   {} break;
@@ -838,6 +870,7 @@ void isyntax_xml_parser_init(isyntax_xml_parser_t* parser) {
 	parser->contentbuf = malloc(parser->contentbuf_capacity);
 	parser->contentcur = NULL;
 	parser->contentlen = 0;
+    parser->content_file_offset = 0;
 
 	parser->current_dicom_attribute_name[0] = '\0';
 	parser->current_dicom_group_tag = 0;
@@ -878,7 +911,7 @@ static void push_to_buffer_maybe_grow(u8** restrict dest, size_t* restrict dest_
 	*dest_len = new_len;
 }
 
-bool isyntax_parse_xml_header(isyntax_t* isyntax, char* xml_header, i64 chunk_length, bool is_last_chunk) {
+static bool isyntax_parse_xml_header(isyntax_t* isyntax, char* xml_header, i64 chunk_offset, i64 chunk_length, bool is_last_chunk) {
 
 	yxml_t* x = NULL;
 	bool success = false;
@@ -937,6 +970,7 @@ bool isyntax_parse_xml_header(isyntax_t* isyntax, char* xml_header, i64 chunk_le
 					parser->contentcur = parser->contentbuf;
 					*parser->contentcur = '\0';
 					parser->contentlen = 0;
+                    parser->content_file_offset = 0;
 					parser->attribute_index = 0;
 					if (strcmp(x->elem, "Attribute") == 0) {
 						node->node_type = ISYNTAX_NODE_LEAF;
@@ -984,6 +1018,11 @@ bool isyntax_parse_xml_header(isyntax_t* isyntax, char* xml_header, i64 chunk_le
 				case YXML_CONTENT: {
 					// element content
 					if (!parser->contentcur) break;
+
+                    // Remember the file offset of the element content
+                    if (parser->content_file_offset == 0) {
+                        parser->content_file_offset = chunk_offset + (doc - xml_header);
+                    }
 
 					// Load iSyntax block header table (and other large XML tags) greedily and bypass yxml parsing overhead
 					if (parser->current_node_type == ISYNTAX_NODE_LEAF) {
@@ -2859,18 +2898,19 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 			i32 chunk_index = 0;
 			for (;; ++chunk_index) {
 //				console_print_verbose("iSyntax: reading XML header chunk %d\n", chunk_index);
-				i64 chunk_length = 0;
+                i64 chunk_offset = chunk_index * (i64)read_size;
+                i64 chunk_length = 0;
 				bool match = false;
 				char* pos = read_buffer;
-				i64 offset = 0;
+				i64 marker_offset = 0;
 				char* marker = (char*)memchr(read_buffer, '\x04', bytes_read);
 				if (marker) {
-					offset = marker - read_buffer;
+                    marker_offset = marker - read_buffer;
 					match = true;
-					chunk_length = offset;
+					chunk_length = marker_offset;
 					header_length += chunk_length;
 					isyntax_data_offset = header_length + 1;
-					i64 data_offset_in_last_chunk = offset + 1;
+					i64 data_offset_in_last_chunk = marker_offset + 1;
 					bytes_read_from_data_offset_in_last_chunk = (i64)bytes_read - data_offset_in_last_chunk;
 				}
 				if (match) {
@@ -2880,7 +2920,7 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 					}
 
 					parse_begin = get_clock();
-					if (!isyntax_parse_xml_header(isyntax, read_buffer, chunk_length, true)) {
+					if (!isyntax_parse_xml_header(isyntax, read_buffer, chunk_offset, chunk_length, true)) {
 						goto failed;
 					}
 					parse_ticks_elapsed += (get_clock() - parse_begin);
@@ -2898,7 +2938,7 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 					if (are_there_bytes_left) {
 
 						parse_begin = get_clock();
-						if (!isyntax_parse_xml_header(isyntax, read_buffer, chunk_length, false)) {
+						if (!isyntax_parse_xml_header(isyntax, read_buffer, chunk_offset, chunk_length, false)) {
 							goto failed;
 						}
 						parse_ticks_elapsed += (get_clock() - parse_begin);
@@ -3319,10 +3359,6 @@ void isyntax_destroy(isyntax_t* isyntax) {
 	}
 	for (i32 image_index = 0; image_index < isyntax->image_count; ++image_index) {
 		isyntax_image_t* image = isyntax->images + image_index;
-        if (image->jpeg_compressed_pixels) {
-            free(image->jpeg_compressed_pixels);
-            image->jpeg_compressed_pixels = NULL;
-        }
 		if (image->image_type == ISYNTAX_IMAGE_TYPE_WSI) {
 			if (image->codeblocks) {
 				free(image->codeblocks);

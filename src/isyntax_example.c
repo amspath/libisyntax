@@ -1,6 +1,7 @@
 #include "libisyntax.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <assert.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -9,7 +10,7 @@
 #define CHECK_LIBISYNTAX_OK(_libisyntax_call) do { \
     isyntax_error_t result = _libisyntax_call;     \
     assert(result == LIBISYNTAX_OK);               \
-} while(0);
+} while(0)
 
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
@@ -31,8 +32,10 @@ int main(int argc, char** argv) {
 
     if (argc <= 1) {
         printf("Usage: %s <isyntax_file> - show levels & tiles.\n"
-               "       %s <isyntax_file> <level> <tile_x> <tile_y> <output.png> - write a tile to output.png",
-               argv[0], argv[0]);
+               "       %s <isyntax_file> <level> <tile_x> <tile_y> <output.png> - write a tile to output.png\n"
+               "       %s <isyntax_file> label <output.jpg> - write label image to output.jpg\n"
+               "       %s <isyntax_file> macro <output.jpg> - write macro image to output.jpg\n",
+               argv[0], argv[0], argv[0], argv[0]);
         return 0;
     }
 
@@ -47,9 +50,7 @@ int main(int argc, char** argv) {
     }
     printf("Successfully opened %s\n", filename);
 
-    if (argc <= 5) {
-        print_isyntax_levels(isyntax);
-    } else {
+    if (argc >= 6) {
         int level = atoi(argv[2]);
         int tile_x = atoi(argv[3]);
         int tile_y = atoi(argv[4]);
@@ -80,6 +81,36 @@ int main(int argc, char** argv) {
 
         free(pixels_rgba);
         libisyntax_cache_destroy(isyntax_cache);
+
+    } else if (argc >= 4) {
+
+        if (strcmp(argv[2], "label") == 0 || strcmp(argv[2], "macro") == 0) {
+
+            const char* output_jpg = argv[3];
+            LOG_VAR("%s", output_jpg);
+
+            uint8_t* jpeg_buffer = NULL;
+            uint32_t jpeg_size = 0;
+            if (strcmp(argv[2], "label") == 0) {
+                CHECK_LIBISYNTAX_OK(libisyntax_read_label_image_jpeg(isyntax, &jpeg_buffer, &jpeg_size));
+            } else if (strcmp(argv[2], "macro") == 0) {
+                CHECK_LIBISYNTAX_OK(libisyntax_read_macro_image_jpeg(isyntax, &jpeg_buffer, &jpeg_size));
+            }
+
+            if (jpeg_buffer) {
+                FILE* fp = fopen(output_jpg, "wb");
+                if (fp) {
+                    fwrite(jpeg_buffer, jpeg_size, 1, fp);
+                    fclose(fp);
+                }
+                free(jpeg_buffer);
+            }
+
+        } else {
+            print_isyntax_levels(isyntax);
+        }
+    } else {
+        print_isyntax_levels(isyntax);
     }
 
     libisyntax_close(isyntax);
