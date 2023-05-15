@@ -491,19 +491,19 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 							default: break;
 							case 0: {
 								image->offset_x = range.start;
-								image->width = range.numsteps;
+								image->width_including_padding = range.numsteps;
 							} break;
 							case 1: {
 								image->offset_y = range.start;
-								image->height = range.numsteps;
+								image->height_including_padding = range.numsteps;
 							} break;
 							case 2: break; // always 3 color channels ("Y" "Co" "Cg"), no need to check
 							case 3: {
 								image->level_count = range.numsteps;
 								image->max_scale = range.numsteps - 1;
                                 int32_t level_padding = (PER_LEVEL_PADDING << range.numsteps) - PER_LEVEL_PADDING;
-                                image->width_minus_padding = image->width - 2 * level_padding;
-                                image->height_minus_padding = image->height - 2 * level_padding;
+                                image->width = image->width_including_padding - 2 * level_padding;
+                                image->height = image->height_including_padding - 2 * level_padding;
 							} break;
 							case 4: break; // always 4 wavelet coefficients ("LL" "LH" "HL" "HH"), no need to check
 						}
@@ -2977,8 +2977,8 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 
 				i32 num_levels = wsi_image->level_count;
 				ASSERT(num_levels >= 1);
-				i32 grid_width = ((wsi_image->width + (block_width << num_levels) - 1) / (block_width << num_levels)) << (num_levels - 1);
-				i32 grid_height = ((wsi_image->height + (block_height << num_levels) - 1) / (block_height << num_levels)) << (num_levels - 1);
+				i32 grid_width = ((wsi_image->width_including_padding + (block_width << num_levels) - 1) / (block_width << num_levels)) << (num_levels - 1);
+				i32 grid_height = ((wsi_image->height_including_padding + (block_height << num_levels) - 1) / (block_height << num_levels)) << (num_levels - 1);
 
 				u64 h_coeff_tile_count = 0; // number of tiles with LH/HL/HH coefficients
 				i32 base_level_tile_count = grid_height * grid_width;
@@ -2989,8 +2989,8 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 					level->scale = scale;
 					level->width_in_tiles = grid_width >> scale;
 					level->height_in_tiles = grid_height >> scale;
-					level->width_minus_padding = wsi_image->width_minus_padding >> scale;
-					level->height_minus_padding = wsi_image->height_minus_padding >> scale;
+					level->width = wsi_image->width >> scale;
+					level->height = wsi_image->height >> scale;
 					level->downsample_factor = (float)(1 << scale);
 					level->um_per_pixel_x = isyntax->mpp_x * level->downsample_factor;
 					level->um_per_pixel_y = isyntax->mpp_y * level->downsample_factor;

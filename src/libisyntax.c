@@ -278,11 +278,11 @@ int32_t libisyntax_level_get_height_in_tiles(const isyntax_level_t* level) {
 }
 
 int32_t libisyntax_level_get_width(const isyntax_level_t* level) {
-	return level->width_minus_padding;
+	return level->width;
 }
 
 int32_t libisyntax_level_get_height(const isyntax_level_t* level) {
-	return level->height_minus_padding;
+	return level->height;
 }
 
 float libisyntax_level_get_mpp_x(const isyntax_level_t* level) {

@@ -275,8 +275,8 @@ typedef struct isyntax_level_t {
 	i32 scale;
 	i32 width_in_tiles;
 	i32 height_in_tiles;
-	i32 width_minus_padding;
-	i32 height_minus_padding;
+	i32 width;
+	i32 height;
 	float downsample_factor;
 	float um_per_pixel_x;
 	float um_per_pixel_y;
@@ -293,10 +293,10 @@ typedef struct isyntax_image_t {
 	u32 image_type;
     i64 base64_encoded_jpg_file_offset;
     size_t base64_encoded_jpg_len;
+	i32 width_including_padding;
+	i32 height_including_padding;
 	i32 width;
 	i32 height;
-	i32 width_minus_padding;
-	i32 height_minus_padding;
 	i32 offset_x;
 	i32 offset_y;
 	i32 level_count;
