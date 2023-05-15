@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(libisyntax)
 
-set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -76,29 +76,28 @@ else()
     set(LIBISYNTAX_COMMON_SOURCE_FILES ${LIBISYNTAX_COMMON_SOURCE_FILES} src/platform/linux_utils.c)
 endif()
 
-add_library(libisyntax
-        ${LIBISYNTAX_COMMON_SOURCE_FILES}
-)
+add_library(libisyntax ${LIBISYNTAX_COMMON_SOURCE_FILES})
 
 if (WIN32)
     target_link_libraries(libisyntax winmm)
 else()
+    find_package(Threads REQUIRED)
+    target_link_libraries(libisyntax Threads::Threads)
 endif()
 
+# Build example program: isyntax_example.c
 add_executable(isyntax_example src/isyntax_example.c)
 target_link_libraries(isyntax_example libisyntax)
 
-# Find LibTIFF library
+# Build iSyntax to TIFF converter program (depends on LibTIFF library)
 find_package(TIFF)
 if (NOT TIFF_FOUND)
     message(WARNING "LibTIFF not found")
     message(WARNING "Will not compile `isyntax-to-tiff` utility")
 else()
     include_directories(${TIFF_INCLUDE_DIR})
-    add_executable(isyntax-to-tiff
-            src/isyntax_to_tiff.c
-            ${LIBISYNTAX_COMMON_SOURCE_FILES} ${TIFF_LIBRARIES})
-target_link_libraries(isyntax-to-tiff PRIVATE ${TIFF_LIBRARIES})
+    add_executable(isyntax-to-tiff src/isyntax_to_tiff.c)
+    target_link_libraries(isyntax-to-tiff libisyntax ${TIFF_LIBRARIES})
 endif()
 
 # TODO(avirodov): Consider moving testing to its own test/CMakeLists. This will require moving the library building
@@ -141,10 +140,14 @@ if(BUILD_TESTING)
             COMMAND ${CMAKE_COMMAND} -E compare_files ../test/expected_output/testslide_example_tile_3_5_10.png ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/output_smoke_example_runs_with_test_slide_producing_output.png)
     set_tests_properties(regression_example_tile_3_5_10_pixel_check PROPERTIES DEPENDS smoke_example_runs_with_test_slide_producing_output)
 
-    add_executable(thread_test test/thread_test.c)
-    target_link_libraries(thread_test libisyntax)
-    add_test(NAME smoke_thread_test
-            COMMAND thread_test)
+    if(NOT(APPLE))
+        # TODO: fix this test on macOS: fatal error: 'threads.h' file not found
+        add_executable(thread_test test/thread_test.c)
+        target_link_libraries(thread_test libisyntax)
+        add_test(NAME smoke_thread_test
+                COMMAND thread_test)
+    endif()
+
 
 endif() # if(BUILD_TESTING)
 
