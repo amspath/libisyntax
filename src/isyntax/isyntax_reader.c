@@ -43,10 +43,7 @@ isyntax_cache_t* isyntax_cache_create(const char* debug_name_or_null, int32_t ca
     return cache_ptr;
 }
 
-void isyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax) {
-    ASSERT(isyntax->ll_coeff_block_allocator == NULL);
-    ASSERT(isyntax->h_coeff_block_allocator == NULL);
-
+void isyntax_cache_init(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax) {
     if (!isyntax_cache->h_coeff_block_allocator.is_valid || !isyntax_cache->ll_coeff_block_allocator.is_valid) {
         // Shouldn't ever partially initialize.
         ASSERT(!isyntax_cache->h_coeff_block_allocator.is_valid);
@@ -66,10 +63,6 @@ void isyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax) {
     // having multiple iSyntax with different block sizes opened with a shared cache is not supported.
     ASSERT(isyntax_cache->allocator_block_width == isyntax->block_width);
     ASSERT(isyntax_cache->allocator_block_height == isyntax->block_height);
-
-    isyntax->ll_coeff_block_allocator = &isyntax_cache->ll_coeff_block_allocator;
-    isyntax->h_coeff_block_allocator = &isyntax_cache->h_coeff_block_allocator;
-    isyntax->is_block_allocator_owned = false;
 }
 
 void isyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
@@ -392,12 +385,13 @@ static void isyntax_make_tile_lists_by_scale(isyntax_t* isyntax, int start_scale
     }
 }
 
-void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, int tile_x, int tile_y,
+void isyntax_tile_read(isyntax_t* isyntax, int scale, int tile_x, int tile_y,
                        uint32_t* pixels_buffer, enum isyntax_pixel_format_t pixel_format) {
     // TODO(avirodov): more granular locking (some notes below). This will require handling overlapping work, that is
     //  thread A needing tile 123 and started to load it, and thread B needing same tile 123 and needs to wait for A.
     // TODO(pvalkema): Can we safely lock the mutex later, after checking if the tile exists?
-    benaphore_lock(&cache->mutex);
+    benaphore_lock(&isyntax->tile_cache->mutex);
+    isyntax_cache_t* cache = isyntax->tile_cache;
 
     isyntax_image_t* wsi = &isyntax->images[isyntax->wsi_image_index];
     isyntax_level_t* level = &wsi->levels[scale];

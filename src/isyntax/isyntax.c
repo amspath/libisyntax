@@ -2035,25 +2035,25 @@ void isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 
 
 		// TODO(avirodov): instead of releasing here, skip copy if still allocated.
 		if (child_top_left->color_channels[color].coeff_ll) {
-			block_free(isyntax->ll_coeff_block_allocator, child_top_left->color_channels[color].coeff_ll);
+			block_free(&isyntax->tile_cache->ll_coeff_block_allocator, child_top_left->color_channels[color].coeff_ll);
 		}
 		if (child_top_right->color_channels[color].coeff_ll) {
-			block_free(isyntax->ll_coeff_block_allocator, child_top_right->color_channels[color].coeff_ll);
+			block_free(&isyntax->tile_cache->ll_coeff_block_allocator, child_top_right->color_channels[color].coeff_ll);
 		}
 		if (child_bottom_left->color_channels[color].coeff_ll) {
-			block_free(isyntax->ll_coeff_block_allocator, child_bottom_left->color_channels[color].coeff_ll);
+			block_free(&isyntax->tile_cache->ll_coeff_block_allocator, child_bottom_left->color_channels[color].coeff_ll);
 		}
 		if (child_bottom_right->color_channels[color].coeff_ll) {
-			block_free(isyntax->ll_coeff_block_allocator, child_bottom_right->color_channels[color].coeff_ll);
+			block_free(&isyntax->tile_cache->ll_coeff_block_allocator, child_bottom_right->color_channels[color].coeff_ll);
 		}
 
 		// NOTE: malloc() and free() can become a bottleneck, they don't scale well especially across many threads.
 		// We use a custom block allocator to address this.
 		i64 start_malloc = get_clock();
-		child_top_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
-		child_top_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
-		child_bottom_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
-		child_bottom_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
+		child_top_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(&isyntax->tile_cache->ll_coeff_block_allocator);
+		child_top_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(&isyntax->tile_cache->ll_coeff_block_allocator);
+		child_bottom_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(&isyntax->tile_cache->ll_coeff_block_allocator);
+		child_bottom_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(&isyntax->tile_cache->ll_coeff_block_allocator);
 		elapsed_malloc += get_seconds_elapsed(start_malloc, get_clock());
 		i32 dest_stride = block_width;
 		// Blit top left child LL block
@@ -2832,7 +2832,7 @@ void isyntax_set_work_queue(isyntax_t* isyntax, work_queue_t* work_queue) {
 }
 
 
-bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators) {
+bool isyntax_open(isyntax_t* isyntax, const char* filename, isyntax_cache_t* shared_cache_or_null) {
 
 	console_print_verbose("Attempting to open iSyntax: %s\n", filename);
 	ASSERT(isyntax);
@@ -3282,18 +3282,14 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 			size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
 			size_t h_coeff_block_size = ll_coeff_block_size * 3;
 			size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
-			if (init_allocators) {
-				isyntax->ll_coeff_block_allocator = malloc(sizeof(block_allocator_t));
-				isyntax->h_coeff_block_allocator = malloc(sizeof(block_allocator_t));
-				*isyntax->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-				*isyntax->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-				isyntax->is_block_allocator_owned = true;
-			} else {
-				// The caller must inject the allocators after return of isyntax_open().
-				isyntax->ll_coeff_block_allocator = NULL;
-				isyntax->h_coeff_block_allocator = NULL;
-				isyntax->is_block_allocator_owned = false;
-			}
+            if (shared_cache_or_null) {
+                isyntax->tile_cache = shared_cache_or_null;
+                isyntax->is_tile_cache_owned = false;
+            } else {
+                isyntax->tile_cache = isyntax_cache_create("local", /*cache_size=*/INT32_MAX);
+                isyntax->is_tile_cache_owned = true;
+            }
+            isyntax_cache_init(isyntax->tile_cache, isyntax);
 
 			success = true;
 
@@ -3340,13 +3336,8 @@ void isyntax_destroy(isyntax_t* isyntax) {
 			}
 		}
 	}
-    if (isyntax->is_block_allocator_owned) {
-        if (isyntax->ll_coeff_block_allocator->is_valid) {
-            block_allocator_destroy(isyntax->ll_coeff_block_allocator);
-        }
-        if (isyntax->h_coeff_block_allocator->is_valid) {
-            block_allocator_destroy(isyntax->h_coeff_block_allocator);
-        }
+    if (isyntax->is_tile_cache_owned) {
+        isyntax_cache_destroy(isyntax->tile_cache);
     } else {
         // Need to individually deallocate tiles from a shared allocator, especially if not tracked via a cache.
         isyntax_image_t* wsi_image = isyntax->images + isyntax->wsi_image_index;
@@ -3357,8 +3348,8 @@ void isyntax_destroy(isyntax_t* isyntax) {
                     isyntax_tile_t* tile = level->tiles + j;
                     for (i32 color = 0; color < 3; ++color) {
                         isyntax_tile_channel_t* channel = tile->color_channels + color;
-                        if (channel->coeff_ll) free(channel->coeff_ll);
-                        if (channel->coeff_h) free(channel->coeff_h);
+                        if (channel->coeff_ll) block_free(&isyntax->tile_cache->ll_coeff_block_allocator, channel->coeff_ll);
+                        if (channel->coeff_h) block_free(&isyntax->tile_cache->h_coeff_block_allocator, channel->coeff_h);
                     }
                 }
             }

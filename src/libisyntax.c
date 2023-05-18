@@ -229,9 +229,8 @@ isyntax_error_t libisyntax_open(const char* filename, isyntax_t** out_isyntax) {
     isyntax_t* result = malloc(sizeof(isyntax_t));
     memset(result, 0, sizeof(*result));
 
-    bool success = isyntax_open(result, filename, /*is_init_allocators=*/false);
+    bool success = isyntax_open(result, filename, /*global_isyntax_cache*/NULL);
     if (success) {
-        isyntax_cache_inject(global_isyntax_cache, result);
         *out_isyntax = result;
         return LIBISYNTAX_OK;
     } else {
@@ -311,7 +310,7 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, int32_t level, int64_t 
 
     // TODO(avirodov): if isyntax_cache is null, we can support using allocators that are in isyntax object,
     //  if is_init_allocators = 1 when created. Not sure is needed.
-    isyntax_tile_read(isyntax, global_isyntax_cache, level, tile_x, tile_y, pixels_buffer, pixel_format);
+    isyntax_tile_read(isyntax, level, tile_x, tile_y, pixels_buffer, pixel_format);
     return LIBISYNTAX_OK;
 }
 

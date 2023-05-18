@@ -358,6 +358,25 @@ typedef struct isyntax_xml_parser_t {
 	bool initialized;
 } isyntax_xml_parser_t;
 
+
+typedef struct isyntax_tile_list_t {
+    isyntax_tile_t* head;
+    isyntax_tile_t* tail;
+    int count;
+    const char* dbg_name;
+} isyntax_tile_list_t;
+
+typedef struct isyntax_cache_t {
+    isyntax_tile_list_t cache_list;
+    benaphore_t mutex;
+    // TODO(avirodov): int refcount;
+    int target_cache_size;
+    block_allocator_t ll_coeff_block_allocator;
+    block_allocator_t h_coeff_block_allocator;
+    int allocator_block_width;
+    int allocator_block_height;
+} isyntax_cache_t;
+
 typedef struct isyntax_t {
 	i64 filesize;
 	file_handle_t file_handle;
@@ -378,11 +397,10 @@ typedef struct isyntax_t {
 	i32 block_height;
 	i32 tile_width;
 	i32 tile_height;
-	icoeff_t* black_dummy_coeff;
-	icoeff_t* white_dummy_coeff;
-	block_allocator_t* ll_coeff_block_allocator;
-	block_allocator_t* h_coeff_block_allocator;
-    bool32 is_block_allocator_owned;
+    icoeff_t* black_dummy_coeff;
+    icoeff_t* white_dummy_coeff;
+    isyntax_cache_t* tile_cache;
+    bool32 is_tile_cache_owned;
 	float loading_time;
 	float total_rgb_transform_time;
 	i32 data_model_major_version; // <100 (usually 5) for iSyntax format v1, >= 100 for iSyntax format v2
@@ -394,7 +412,7 @@ typedef struct isyntax_t {
 void isyntax_xml_parser_init(isyntax_xml_parser_t* parser);
 bool isyntax_hulsken_decompress(u8 *compressed, size_t compressed_size, i32 block_width, i32 block_height, i32 coefficient, i32 compressor_version, i16* out_buffer);
 void isyntax_set_work_queue(isyntax_t* isyntax, work_queue_t* work_queue);
-bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators);
+bool isyntax_open(isyntax_t* isyntax, const char* filename, isyntax_cache_t* shared_cache_or_null);
 void isyntax_destroy(isyntax_t* isyntax);
 void isyntax_idwt(icoeff_t* idwt, i32 quadrant_width, i32 quadrant_height, bool output_steps_as_png, const char* png_name);
 void isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y, u32* out_buffer_or_null, enum isyntax_pixel_format_t pixel_format);
@@ -405,6 +423,12 @@ void isyntax_decompress_codeblock_in_chunk(isyntax_codeblock_t* codeblock, i32 b
 i32 isyntax_get_chunk_codeblocks_per_color_for_level(i32 level, bool has_ll);
 u8* isyntax_get_associated_image_pixels(isyntax_t* isyntax, isyntax_image_t* image, enum isyntax_pixel_format_t pixel_format);
 u8* isyntax_get_associated_image_jpeg(isyntax_t* isyntax, isyntax_image_t* image, u32* jpeg_size);
+
+// Implemented in isyntax_reader.h
+isyntax_cache_t* isyntax_cache_create(const char* debug_name_or_null, int32_t cache_size);
+void isyntax_cache_init(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax);
+void isyntax_cache_trim(isyntax_cache_t* isyntax_cache, i32 target_size);
+void isyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
 
 
 #ifdef __cplusplus
