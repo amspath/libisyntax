@@ -206,7 +206,6 @@ static void isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isyntax, i
         ASSERT(pixels_buffer != NULL); // Shouldn't be asking for idwt at level 0 if we're not going to use the result for pixels.
         isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
                                  tile->tile_scale, tile->tile_x, tile->tile_y,
-                                 &cache->ll_coeff_block_allocator,
                                  pixels_buffer, pixel_format);
         return;
     }
@@ -216,7 +215,6 @@ static void isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isyntax, i
         //  the lls in the tile. Currently need to recompute idwt.
         isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
                           tile->tile_scale, tile->tile_x, tile->tile_y,
-                          &cache->ll_coeff_block_allocator,
                           pixels_buffer, pixel_format);
         return;
     }
@@ -231,7 +229,6 @@ static void isyntax_openslide_idwt(isyntax_cache_t* cache, isyntax_t* isyntax, i
 
     isyntax_load_tile(isyntax, &isyntax->images[isyntax->wsi_image_index],
                       tile->tile_scale, tile->tile_x, tile->tile_y,
-                      &cache->ll_coeff_block_allocator,
                       /*pixels_buffer=*/NULL, /*pixel_format=*/0);
 }
 
