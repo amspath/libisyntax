@@ -31,6 +31,78 @@
 #define LOG(msg, ...) console_print(msg, ##__VA_ARGS__)
 #define LOG_VAR(fmt, var) console_print("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
+isyntax_cache_t* isyntax_cache_create(const char* debug_name_or_null, int32_t cache_size)
+{
+    isyntax_cache_t* cache_ptr = malloc(sizeof(isyntax_cache_t));
+    memset(cache_ptr, 0, sizeof(*cache_ptr));
+    tile_list_init(&cache_ptr->cache_list, debug_name_or_null);
+    cache_ptr->target_cache_size = cache_size;
+    cache_ptr->mutex = benaphore_create();
+
+    // Note: rest of initialization is deferred to the first injection, as that is where we will know the block size.
+    return cache_ptr;
+}
+
+void isyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax) {
+    ASSERT(isyntax->ll_coeff_block_allocator == NULL);
+    ASSERT(isyntax->h_coeff_block_allocator == NULL);
+
+    if (!isyntax_cache->h_coeff_block_allocator.is_valid || !isyntax_cache->ll_coeff_block_allocator.is_valid) {
+        // Shouldn't ever partially initialize.
+        ASSERT(!isyntax_cache->h_coeff_block_allocator.is_valid);
+        ASSERT(!isyntax_cache->ll_coeff_block_allocator.is_valid);
+
+        isyntax_cache->allocator_block_width = isyntax->block_width;
+        isyntax_cache->allocator_block_height = isyntax->block_height;
+        size_t ll_coeff_block_size = isyntax->block_width * isyntax->block_height * sizeof(icoeff_t);
+        size_t block_allocator_maximum_capacity_in_blocks = GIGABYTES(32) / ll_coeff_block_size;
+        size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
+        size_t h_coeff_block_size = ll_coeff_block_size * 3;
+        size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
+        isyntax_cache->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+        isyntax_cache->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+    }
+
+    // having multiple iSyntax with different block sizes opened with a shared cache is not supported.
+    ASSERT(isyntax_cache->allocator_block_width == isyntax->block_width);
+    ASSERT(isyntax_cache->allocator_block_height == isyntax->block_height);
+
+    isyntax->ll_coeff_block_allocator = &isyntax_cache->ll_coeff_block_allocator;
+    isyntax->h_coeff_block_allocator = &isyntax_cache->h_coeff_block_allocator;
+    isyntax->is_block_allocator_owned = false;
+}
+
+void isyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
+    if (isyntax_cache->ll_coeff_block_allocator.is_valid) {
+        block_allocator_destroy(&isyntax_cache->ll_coeff_block_allocator);
+    }
+    if (isyntax_cache->h_coeff_block_allocator.is_valid) {
+        block_allocator_destroy(&isyntax_cache->h_coeff_block_allocator);
+    }
+    benaphore_destroy(&isyntax_cache->mutex);
+    free(isyntax_cache);
+}
+
+void isyntax_cache_trim(isyntax_cache_t* isyntax_cache, i32 target_size) {
+    // TODO(avirodov): later will need to skip tiles that are reserved by other threads.
+    while (isyntax_cache->cache_list.count > target_size) {
+        isyntax_tile_t* tile = isyntax_cache->cache_list.tail;
+        tile_list_remove(&isyntax_cache->cache_list, tile);
+        for (int i = 0; i < 3; ++i) {
+            if (tile->has_ll) {
+                block_free(&isyntax_cache->ll_coeff_block_allocator, tile->color_channels[i].coeff_ll);
+                tile->color_channels[i].coeff_ll = NULL;
+            }
+            if (tile->has_h) {
+                block_free(&isyntax_cache->h_coeff_block_allocator, tile->color_channels[i].coeff_h);
+                tile->color_channels[i].coeff_h = NULL;
+            }
+        }
+        tile->has_ll = false;
+        tile->has_h = false;
+    }
+}
+
 void tile_list_init(isyntax_tile_list_t* list, const char* dbg_name) {
     list->head = NULL;
     list->tail = NULL;
@@ -393,23 +465,6 @@ void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, in
 
     // Cache trim. Since we have the result already, it is possible that tiles from this run will be trimmed here
     // if cache is small or work happened on other threads.
-    // TODO(avirodov): later will need to skip tiles that are reserved by other threads.
-    while (cache->cache_list.count > cache->target_cache_size) {
-        isyntax_tile_t* tile = cache->cache_list.tail;
-        tile_list_remove(&cache->cache_list, tile);
-        for (int i = 0; i < 3; ++i) {
-            if (tile->has_ll) {
-                block_free(&cache->ll_coeff_block_allocator, tile->color_channels[i].coeff_ll);
-                tile->color_channels[i].coeff_ll = NULL;
-            }
-            if (tile->has_h) {
-                block_free(&cache->h_coeff_block_allocator, tile->color_channels[i].coeff_h);
-                tile->color_channels[i].coeff_h = NULL;
-            }
-        }
-        tile->has_ll = false;
-        tile->has_h = false;
-    }
-
+    isyntax_cache_trim(cache, cache->target_cache_size);
     benaphore_unlock(&cache->mutex);
 }

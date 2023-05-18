@@ -204,6 +204,8 @@ static benaphore_t* libisyntax_get_global_mutex() {
     return &libisyntax_global_mutex;
 }
 
+static isyntax_cache_t* global_isyntax_cache = NULL;
+
 isyntax_error_t libisyntax_init() {
     // Lock-unlock to ensure that all parallel calls to libisyntax_init() wait for the actual initialization to complete.
     benaphore_lock(libisyntax_get_global_mutex());
@@ -214,20 +216,22 @@ isyntax_error_t libisyntax_init() {
         get_system_info(false);
         DBGCTR_COUNT(dbgctr_init_thread_pool_counter);
         init_thread_pool();
+        global_isyntax_cache = isyntax_cache_create("global", 2000); // TODO(avirodov): size hint.
         libisyntax_global_init_complete = true;
     }
     benaphore_unlock(libisyntax_get_global_mutex());
     return LIBISYNTAX_OK;
 }
 
-isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax) {
+isyntax_error_t libisyntax_open(const char* filename, isyntax_t** out_isyntax) {
     // Note(avirodov): intentionally not changing api of isyntax_open. We can do that later if needed and reduce
     // the size/count of wrappers.
     isyntax_t* result = malloc(sizeof(isyntax_t));
     memset(result, 0, sizeof(*result));
 
-    bool success = isyntax_open(result, filename, is_init_allocators);
+    bool success = isyntax_open(result, filename, /*is_init_allocators=*/false);
     if (success) {
+        isyntax_cache_inject(global_isyntax_cache, result);
         *out_isyntax = result;
         return LIBISYNTAX_OK;
     } else {
@@ -237,6 +241,8 @@ isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators
 }
 
 void libisyntax_close(isyntax_t* isyntax) {
+    // Force removal of this isyntax's tiles (and all other tiles as a side effect) from global cache here.
+    isyntax_cache_trim(global_isyntax_cache, /*target_size=*/0);
     isyntax_destroy(isyntax);
     free(isyntax);
 }
@@ -293,69 +299,10 @@ float libisyntax_level_get_mpp_y(const isyntax_level_t* level) {
 	return level->um_per_pixel_y;
 }
 
-isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t cache_size,
-                                        isyntax_cache_t** out_isyntax_cache)
-{
-    isyntax_cache_t* cache_ptr = malloc(sizeof(isyntax_cache_t));
-    memset(cache_ptr, 0, sizeof(*cache_ptr));
-    tile_list_init(&cache_ptr->cache_list, debug_name_or_null);
-    cache_ptr->target_cache_size = cache_size;
-    cache_ptr->mutex = benaphore_create();
-
-    // Note: rest of initialization is deferred to the first injection, as that is where we will know the block size.
-
-    *out_isyntax_cache = cache_ptr;
-    return LIBISYNTAX_OK;
-}
-
-isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax) {
-    // TODO(avirodov): consider refactoring implementation to another file, here and in destroy.
-    if (isyntax->ll_coeff_block_allocator != NULL || isyntax->h_coeff_block_allocator != NULL) {
-        return LIBISYNTAX_INVALID_ARGUMENT;
-    }
-
-    if (!isyntax_cache->h_coeff_block_allocator.is_valid || !isyntax_cache->ll_coeff_block_allocator.is_valid) {
-        // Shouldn't ever partially initialize.
-        ASSERT(!isyntax_cache->h_coeff_block_allocator.is_valid);
-        ASSERT(!isyntax_cache->ll_coeff_block_allocator.is_valid);
-
-        isyntax_cache->allocator_block_width = isyntax->block_width;
-        isyntax_cache->allocator_block_height = isyntax->block_height;
-        size_t ll_coeff_block_size = isyntax->block_width * isyntax->block_height * sizeof(icoeff_t);
-        size_t block_allocator_maximum_capacity_in_blocks = GIGABYTES(32) / ll_coeff_block_size;
-        size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
-        size_t h_coeff_block_size = ll_coeff_block_size * 3;
-        size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
-        isyntax_cache->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-        isyntax_cache->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-    }
-
-    if (isyntax_cache->allocator_block_width != isyntax->block_width ||
-            isyntax_cache->allocator_block_height != isyntax->block_height) {
-        return LIBISYNTAX_FATAL; // Not implemented, see todo in libisyntax.h.
-    }
-
-    isyntax->ll_coeff_block_allocator = &isyntax_cache->ll_coeff_block_allocator;
-    isyntax->h_coeff_block_allocator = &isyntax_cache->h_coeff_block_allocator;
-    isyntax->is_block_allocator_owned = false;
-    return LIBISYNTAX_OK;
-}
-
-void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
-    if (isyntax_cache->ll_coeff_block_allocator.is_valid) {
-        block_allocator_destroy(&isyntax_cache->ll_coeff_block_allocator);
-    }
-    if (isyntax_cache->h_coeff_block_allocator.is_valid) {
-        block_allocator_destroy(&isyntax_cache->h_coeff_block_allocator);
-    }
-    benaphore_destroy(&isyntax_cache->mutex);
-    free(isyntax_cache);
-}
 
 // TODO(pvalkema): should we allow passing a stride for the pixels_buffer, to allow blitting into buffers
 //  that are not exactly the height/width of the region?
-isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
-                                     int32_t level, int64_t tile_x, int64_t tile_y,
+isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, int32_t level, int64_t tile_x, int64_t tile_y,
                                      uint32_t* pixels_buffer, int32_t pixel_format) {
     if (pixel_format <= _LIBISYNTAX_PIXEL_FORMAT_START || pixel_format >= _LIBISYNTAX_PIXEL_FORMAT_END) {
         return LIBISYNTAX_INVALID_ARGUMENT;
@@ -364,13 +311,13 @@ isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isynta
 
     // TODO(avirodov): if isyntax_cache is null, we can support using allocators that are in isyntax object,
     //  if is_init_allocators = 1 when created. Not sure is needed.
-    isyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, pixels_buffer, pixel_format);
+    isyntax_tile_read(isyntax, global_isyntax_cache, level, tile_x, tile_y, pixels_buffer, pixel_format);
     return LIBISYNTAX_OK;
 }
 
 #define PER_LEVEL_PADDING 3
 
-isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t* pixels_buffer,
                                        int32_t pixel_format) {
 
@@ -415,7 +362,7 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
             // TODO(pvalkema): be more robust here
             ASSERT(tile_x < current_level->width_in_tiles);
             ASSERT(tile_y < current_level->height_in_tiles);
-            CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, tile_pixels, pixel_format));
+            CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, level, tile_x, tile_y, tile_pixels, pixel_format));
 
             // Copy the relevant portion of the tile to the region
             for (int64_t i = 0; i < copy_height; ++i) {

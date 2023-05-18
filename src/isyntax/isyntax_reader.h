@@ -28,3 +28,8 @@ void isyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* cache, int scale, in
 
 void tile_list_init(isyntax_tile_list_t* list, const char* dbg_name);
 void tile_list_remove(isyntax_tile_list_t* list, isyntax_tile_t* tile);
+
+isyntax_cache_t* isyntax_cache_create(const char* debug_name_or_null, int32_t cache_size);
+void isyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax);
+void isyntax_cache_trim(isyntax_cache_t* isyntax_cache, i32 target_size);
+void isyntax_cache_destroy(isyntax_cache_t* isyntax_cache);

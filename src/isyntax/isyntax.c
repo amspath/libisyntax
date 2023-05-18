@@ -3347,6 +3347,22 @@ void isyntax_destroy(isyntax_t* isyntax) {
         if (isyntax->h_coeff_block_allocator->is_valid) {
             block_allocator_destroy(isyntax->h_coeff_block_allocator);
         }
+    } else {
+        // Need to individually deallocate tiles from a shared allocator, especially if not tracked via a cache.
+        isyntax_image_t* wsi_image = isyntax->images + isyntax->wsi_image_index;
+        for (i32 i = 0; i < wsi_image->level_count; ++i) {
+            isyntax_level_t* level = wsi_image->levels + i;
+            if (level->tiles) {
+                for (i32 j = 0; j < level->tile_count; ++j) {
+                    isyntax_tile_t* tile = level->tiles + j;
+                    for (i32 color = 0; color < 3; ++color) {
+                        isyntax_tile_channel_t* channel = tile->color_channels + color;
+                        if (channel->coeff_ll) free(channel->coeff_ll);
+                        if (channel->coeff_h) free(channel->coeff_h);
+                    }
+                }
+            }
+        }
     }
 	if (isyntax->black_dummy_coeff) {
 		free(isyntax->black_dummy_coeff);
@@ -3375,20 +3391,8 @@ void isyntax_destroy(isyntax_t* isyntax) {
 			}
 			for (i32 i = 0; i < image->level_count; ++i) {
 				isyntax_level_t* level = image->levels + i;
-				if (level->tiles) {
-#if 0
-					for (i32 j = 0; j < level->tile_count; ++j) {
-						isyntax_tile_t* tile = level->tiles + j;
-						for (i32 color = 0; color < 3; ++color) {
-							isyntax_tile_channel_t* channel = tile->color_channels + color;
-							if (channel->coeff_ll) free(channel->coeff_ll);
-							if (channel->coeff_h) free(channel->coeff_h);
-						}
-					}
-#endif
-					free(level->tiles);
-					level->tiles = NULL;
-				}
+                free(level->tiles);
+                level->tiles = NULL;
 			}
 		}
 	}

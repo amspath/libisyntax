@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
     libisyntax_init();
 
     isyntax_t* isyntax;
-    if (libisyntax_open(filename, /*is_init_allocators=*/0, &isyntax) != LIBISYNTAX_OK) {
+    if (libisyntax_open(filename, &isyntax) != LIBISYNTAX_OK) {
         printf("Failed to open %s\n", filename);
         return -1;
     }
@@ -66,13 +66,9 @@ int main(int argc, char** argv) {
         LOG_VAR("%d", tile_width);
         LOG_VAR("%d", tile_height);
 
-        isyntax_cache_t *isyntax_cache = NULL;
-        CHECK_LIBISYNTAX_OK(libisyntax_cache_create("example cache", 2000, &isyntax_cache));
-        CHECK_LIBISYNTAX_OK(libisyntax_cache_inject(isyntax_cache, isyntax));
-
         // RGBA is what stbi expects.
         uint32_t *pixels_rgba = malloc(tile_width * tile_height * 4);
-        CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y,
+        CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, level, tile_x, tile_y,
                                                  pixels_rgba, LIBISYNTAX_PIXEL_FORMAT_RGBA));
 
         printf("Writing %s...\n", output_png);
@@ -80,7 +76,6 @@ int main(int argc, char** argv) {
         printf("Done writing %s.\n", output_png);
 
         free(pixels_rgba);
-        libisyntax_cache_destroy(isyntax_cache);
 
     } else if (argc >= 4) {
 

@@ -41,7 +41,7 @@ typedef struct isyntax_cache_t isyntax_cache_t;
 //== Common API ==
 // TODO(avirodov): are repeated calls of libisyntax_init() allowed? Currently I believe not.
 isyntax_error_t libisyntax_init();
-isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax);
+isyntax_error_t libisyntax_open(const char* filename, isyntax_t** out_isyntax);
 void            libisyntax_close(isyntax_t* isyntax);
 
 //== Getters API ==
@@ -60,26 +60,14 @@ int32_t                libisyntax_level_get_height(const isyntax_level_t* level)
 float                  libisyntax_level_get_mpp_x(const isyntax_level_t* level);
 float                  libisyntax_level_get_mpp_y(const isyntax_level_t* level);
 
-//== Cache API ==
-isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t cache_size,
-                                        isyntax_cache_t** out_isyntax_cache);
-// Note: returns LIBISYNTAX_INVALID_ARGUMENT  if isyntax_to_inject was not initialized with is_init_allocators = 0.
-// TODO(avirodov): this function will fail if the isyntax object has different block size than the first isyntax injected.
-//  Block size variation was not observed in practice, and a proper fix may include supporting multiple block sizes
-//  within isyntax_cache_t implementation.
-isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax);
-void            libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache);
-
-
 //== Tile API ==
 // Reads a tile into a user-supplied buffer. Buffer size should be [tile_width * tile_height * 4], as returned by
 // `libisyntax_get_tile_width()`/`libisyntax_get_tile_height()`. The caller is responsible for managing the buffer
 // allocation/deallocation.
 // pixel_format is one of isyntax_pixel_format_t.
-isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache,
-                                     int32_t level, int64_t tile_x, int64_t tile_y,
+isyntax_error_t libisyntax_tile_read(isyntax_t* isyntax, int32_t level, int64_t tile_x, int64_t tile_y,
                                      uint32_t* pixels_buffer, int32_t pixel_format);
-isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyntax_cache, int32_t level,
+isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, int32_t level,
                                        int64_t x, int64_t y, int64_t width, int64_t height, uint32_t* pixels_buffer,
                                        int32_t pixel_format);
 
