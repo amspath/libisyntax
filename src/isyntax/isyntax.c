@@ -1977,7 +1977,6 @@ u32 isyntax_idwt_tile_for_color_channel(isyntax_t* isyntax, isyntax_image_t* wsi
 }
 
 void isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 tile_x, i32 tile_y,
-                       block_allocator_t* ll_coeff_block_allocator,
                        u32* out_buffer_or_null, enum isyntax_pixel_format_t pixel_format) {
 	// printf("@@@ isyntax_load_tile scale=%d tile_x=%d tile_y=%d\n", scale, tile_x, tile_y);
 	isyntax_level_t* level = wsi->levels + scale;
@@ -2036,25 +2035,25 @@ void isyntax_load_tile(isyntax_t* isyntax, isyntax_image_t* wsi, i32 scale, i32 
 
 		// TODO(avirodov): instead of releasing here, skip copy if still allocated.
 		if (child_top_left->color_channels[color].coeff_ll) {
-			block_free(ll_coeff_block_allocator, child_top_left->color_channels[color].coeff_ll);
+			block_free(isyntax->ll_coeff_block_allocator, child_top_left->color_channels[color].coeff_ll);
 		}
 		if (child_top_right->color_channels[color].coeff_ll) {
-			block_free(ll_coeff_block_allocator, child_top_right->color_channels[color].coeff_ll);
+			block_free(isyntax->ll_coeff_block_allocator, child_top_right->color_channels[color].coeff_ll);
 		}
 		if (child_bottom_left->color_channels[color].coeff_ll) {
-			block_free(ll_coeff_block_allocator, child_bottom_left->color_channels[color].coeff_ll);
+			block_free(isyntax->ll_coeff_block_allocator, child_bottom_left->color_channels[color].coeff_ll);
 		}
 		if (child_bottom_right->color_channels[color].coeff_ll) {
-			block_free(ll_coeff_block_allocator, child_bottom_right->color_channels[color].coeff_ll);
+			block_free(isyntax->ll_coeff_block_allocator, child_bottom_right->color_channels[color].coeff_ll);
 		}
 
 		// NOTE: malloc() and free() can become a bottleneck, they don't scale well especially across many threads.
 		// We use a custom block allocator to address this.
 		i64 start_malloc = get_clock();
-		child_top_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(ll_coeff_block_allocator);
-		child_top_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(ll_coeff_block_allocator);
-		child_bottom_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(ll_coeff_block_allocator);
-		child_bottom_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(ll_coeff_block_allocator);
+		child_top_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
+		child_top_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
+		child_bottom_left->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
+		child_bottom_right->color_channels[color].coeff_ll = (icoeff_t*)block_alloc(isyntax->ll_coeff_block_allocator);
 		elapsed_malloc += get_seconds_elapsed(start_malloc, get_clock());
 		i32 dest_stride = block_width;
 		// Blit top left child LL block
@@ -3348,6 +3347,22 @@ void isyntax_destroy(isyntax_t* isyntax) {
         if (isyntax->h_coeff_block_allocator->is_valid) {
             block_allocator_destroy(isyntax->h_coeff_block_allocator);
         }
+    } else {
+        // Need to individually deallocate tiles from a shared allocator, especially if not tracked via a cache.
+        isyntax_image_t* wsi_image = isyntax->images + isyntax->wsi_image_index;
+        for (i32 i = 0; i < wsi_image->level_count; ++i) {
+            isyntax_level_t* level = wsi_image->levels + i;
+            if (level->tiles) {
+                for (i32 j = 0; j < level->tile_count; ++j) {
+                    isyntax_tile_t* tile = level->tiles + j;
+                    for (i32 color = 0; color < 3; ++color) {
+                        isyntax_tile_channel_t* channel = tile->color_channels + color;
+                        if (channel->coeff_ll) free(channel->coeff_ll);
+                        if (channel->coeff_h) free(channel->coeff_h);
+                    }
+                }
+            }
+        }
     }
 	if (isyntax->black_dummy_coeff) {
 		free(isyntax->black_dummy_coeff);
@@ -3376,20 +3391,8 @@ void isyntax_destroy(isyntax_t* isyntax) {
 			}
 			for (i32 i = 0; i < image->level_count; ++i) {
 				isyntax_level_t* level = image->levels + i;
-				if (level->tiles) {
-#if 0
-					for (i32 j = 0; j < level->tile_count; ++j) {
-						isyntax_tile_t* tile = level->tiles + j;
-						for (i32 color = 0; color < 3; ++color) {
-							isyntax_tile_channel_t* channel = tile->color_channels + color;
-							if (channel->coeff_ll) free(channel->coeff_ll);
-							if (channel->coeff_h) free(channel->coeff_h);
-						}
-					}
-#endif
-					free(level->tiles);
-					level->tiles = NULL;
-				}
+                free(level->tiles);
+                level->tiles = NULL;
 			}
 		}
 	}
