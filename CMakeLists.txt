@@ -92,13 +92,26 @@ target_link_libraries(isyntax_example libisyntax)
 # Build iSyntax to TIFF converter program (depends on LibTIFF library)
 find_package(TIFF)
 if (NOT TIFF_FOUND)
-    message(WARNING "LibTIFF not found")
-    message(WARNING "Will not compile `isyntax-to-tiff` utility")
+    if (WIN32)
+        # On Windows, compile-time linking to libtiff is a nightmare to set up (at least for me).
+        # As a fallback, use dynamic linking at runtime, which is a lesser headache.
+        message(WARNING "LibTIFF not found - `isyntax-to-tiff` utility will try to link LibTIFF at runtime")
+        # To access the symbols, pass the directory containing the libtiff sources to CMake like so:
+        # -DTIFF_INCLUDE_DIR=C:/work/libraries/tiff-4.6.0/libtiff
+        include_directories(${TIFF_INCLUDE_DIR})
+        add_executable(isyntax-to-tiff src/isyntax_to_tiff.c)
+        target_compile_definitions(isyntax-to-tiff PRIVATE LINK_LIBTIFF_AT_RUNTIME=1)
+        target_link_libraries(isyntax-to-tiff libisyntax winmm)
+    else()
+        message(WARNING "LibTIFF not found")
+        message(WARNING "Will not compile `isyntax-to-tiff` utility")
+    endif()
 else()
     include_directories(${TIFF_INCLUDE_DIR})
     add_executable(isyntax-to-tiff src/isyntax_to_tiff.c)
     target_link_libraries(isyntax-to-tiff libisyntax ${TIFF_LIBRARIES})
 endif()
+
 
 # TODO(avirodov): Consider moving testing to its own test/CMakeLists. This will require moving the library building
 #   to src/CMakeLists to avoid circular deps.

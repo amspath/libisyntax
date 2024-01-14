@@ -26,7 +26,16 @@
 */
 
 #include "libisyntax.h"
+
+#ifdef LINK_LIBTIFF_AT_RUNTIME
+// On Windows, CMake will #define LINK_LIBTIFF_AT_RUNTIME if find_package(TIFF) fails.
+// In this case, we will load the libtiff procedures from the DLL at runtime.
+#define LIBTIFF_API_IMPL
+#include "utils/libtiff_api.h"
+#else
 #include "tiffio.h"
+#endif
+
 #include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -404,6 +413,9 @@ int main(int argc, char **argv) {
     int32_t tile_height = tile_size;
 
     libisyntax_init();
+#ifdef LINK_LIBTIFF_AT_RUNTIME
+	init_libtiff_at_runtime();
+#endif
 
     isyntax_t *isyntax;
     if (libisyntax_open(filename, /*is_init_allocators=*/0, &isyntax) != LIBISYNTAX_OK) {
