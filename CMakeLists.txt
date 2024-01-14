@@ -86,7 +86,7 @@ else()
 endif()
 
 # Build example program: isyntax_example.c
-add_executable(isyntax_example src/isyntax_example.c)
+add_executable(isyntax_example src/examples/isyntax_example.c)
 target_link_libraries(isyntax_example libisyntax)
 
 # Build iSyntax to TIFF converter program (depends on LibTIFF library)
@@ -99,7 +99,7 @@ if (NOT TIFF_FOUND)
         # To access the symbols, pass the directory containing the libtiff sources to CMake like so:
         # -DTIFF_INCLUDE_DIR=C:/work/libraries/tiff-4.6.0/libtiff
         include_directories(${TIFF_INCLUDE_DIR})
-        add_executable(isyntax-to-tiff src/isyntax_to_tiff.c)
+        add_executable(isyntax-to-tiff src/examples/isyntax_to_tiff.c)
         target_compile_definitions(isyntax-to-tiff PRIVATE LINK_LIBTIFF_AT_RUNTIME=1)
         target_link_libraries(isyntax-to-tiff libisyntax winmm)
     else()
