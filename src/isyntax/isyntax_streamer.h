@@ -60,7 +60,7 @@ typedef struct isyntax_streamer_t {
 	work_queue_t* tile_completion_queue;
 	work_queue_callback_t* tile_completion_callback;
 	u32 tile_completion_task_identifier;
-
+    enum isyntax_pixel_format_t pixel_format;
 } isyntax_streamer_t;
 
 

@@ -78,7 +78,8 @@ static i32 isyntax_load_all_tiles_in_level(isyntax_streamer_t* streamer, i32 sca
 			if (global_worker_thread_idle_count > 0 && tasks_waiting < global_system_info.logical_cpu_count * 10) {
 				isyntax_begin_load_tile(streamer, scale, tile_x, tile_y);
 			} else if (!is_tile_streamer_frame_boundary_passed) {
-				u32* tile_pixels = isyntax_load_tile(isyntax, wsi, scale, tile_x, tile_y, isyntax->ll_coeff_block_allocator, true);
+                u32* tile_pixels = (u32*)malloc(isyntax->tile_width * isyntax->tile_height * sizeof(u32));
+				isyntax_load_tile(isyntax, wsi, scale, tile_x, tile_y, isyntax->ll_coeff_block_allocator, tile_pixels, streamer->pixel_format);
 				if (tile_pixels) {
 					submit_tile_completed(streamer, tile_pixels, scale, tile_index, isyntax->tile_width, isyntax->tile_height);
 				}
@@ -347,9 +348,12 @@ typedef struct isyntax_load_tile_task_t {
 
 void isyntax_load_tile_task_func(i32 logical_thread_index, void* userdata) {
 	isyntax_load_tile_task_t* task = (isyntax_load_tile_task_t*) userdata;
-	u32* tile_pixels = isyntax_load_tile(task->streamer.isyntax, task->streamer.wsi, task->scale,
-										 task->tile_x, task->tile_y,
-										 task->streamer.isyntax->ll_coeff_block_allocator, true);
+    isyntax_t* isyntax = task->streamer.isyntax;
+	u32* tile_pixels = (u32*)malloc(isyntax->tile_width * isyntax->tile_height * sizeof(u32));
+    isyntax_load_tile(task->streamer.isyntax, task->streamer.wsi,
+                      task->scale, task->tile_x, task->tile_y,
+                      task->streamer.isyntax->ll_coeff_block_allocator,
+                      tile_pixels, task->streamer.pixel_format);
 	if (tile_pixels) {
 		submit_tile_completed(&task->streamer, tile_pixels, task->scale, task->tile_index,
 							  task->streamer.isyntax->tile_width, task->streamer.isyntax->tile_height);
