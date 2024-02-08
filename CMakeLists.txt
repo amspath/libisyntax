@@ -108,7 +108,7 @@ if (NOT TIFF_FOUND)
     endif()
 else()
     include_directories(${TIFF_INCLUDE_DIR})
-    add_executable(isyntax-to-tiff src/isyntax_to_tiff.c)
+    add_executable(isyntax-to-tiff src/examples/isyntax_to_tiff.c)
     target_link_libraries(isyntax-to-tiff libisyntax ${TIFF_LIBRARIES})
 endif()
 
