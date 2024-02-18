@@ -148,13 +148,6 @@ bool are_bounds2f_overlapping(bounds2f a, bounds2f b) {
 	return result;
 }
 
-v2f world_pos_to_screen_pos(v2f world_pos, v2f camera_min, float screen_um_per_pixel) {
-	v2f transformed_pos = {
-			.x = (world_pos.x - camera_min.x) / screen_um_per_pixel,
-			.y = (world_pos.y - camera_min.y) / screen_um_per_pixel,
-	};
-	return transformed_pos;
-}
 
 v2i world_pos_to_pixel_pos(v2f world_pos, float um_per_pixel, i32 level) {
 	v2i result;
@@ -208,6 +201,36 @@ bounds2f bounds_from_pivot_point(v2f pivot, v2f pivot_relative_pos, float r_minu
 			.bottom = pivot.y + t_minus_b * (1.0f - pivot_relative_pos.y),
 	};
 	return bounds;
+}
+
+bounds2f bounds_from_points(v2f* points, i32 point_count) {
+	bounds2f bounds = { FLT_MAX, FLT_MAX, FLT_MIN, FLT_MIN};
+	for (i32 i = 0; i < point_count; ++i) {
+		v2f p = points[i];
+		bounds.min.x = MIN(bounds.min.x, p.x);
+		bounds.min.y = MIN(bounds.min.y, p.y);
+		bounds.max.x = MAX(bounds.max.x, p.x);
+		bounds.max.y = MAX(bounds.max.y, p.y);
+	}
+	return bounds;
+}
+
+polygon4f rotated_rectangle(float width, float height, float rotation) {
+	float sin_theta = sinf(rotation);
+	float cos_theta = cosf(rotation);
+
+	float right = 0.5f * width;
+	float left = -right;
+	float bottom = 0.5f * height;
+	float top = -bottom;
+
+	polygon4f result = { .values = {
+			{left * cos_theta - top * sin_theta, top * cos_theta + left * sin_theta }, // top left
+			{right * cos_theta - top * sin_theta, top * cos_theta + right * sin_theta }, // top right
+			{left * cos_theta - bottom * sin_theta, bottom * cos_theta + left * sin_theta }, // bottom left
+			{right * cos_theta - bottom * sin_theta, bottom * cos_theta + right * sin_theta }, // bottom right
+	}};
+	return result;
 }
 
 bounds2i world_bounds_to_pixel_bounds(bounds2f* world_bounds, float mpp_x, float mpp_y) {
