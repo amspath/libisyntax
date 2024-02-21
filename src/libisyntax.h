@@ -90,4 +90,4 @@ isyntax_error_t libisyntax_read_macro_image(isyntax_t* isyntax, int32_t* width, 
                                                    uint32_t** pixels_buffer, int32_t pixel_format);
 isyntax_error_t libisyntax_read_label_image_jpeg(isyntax_t* isyntax, uint8_t** jpeg_buffer, uint32_t* jpeg_size);
 isyntax_error_t libisyntax_read_macro_image_jpeg(isyntax_t* isyntax, uint8_t** jpeg_buffer, uint32_t* jpeg_size);
-
+isyntax_error_t libisyntax_read_icc_profile(isyntax_t* isyntax, isyntax_image_t* image, uint8_t** icc_profile_buffer, uint32_t* icc_profile_size);
