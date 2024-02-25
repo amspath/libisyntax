@@ -480,3 +480,15 @@ isyntax_error_t libisyntax_read_macro_image_jpeg(isyntax_t* isyntax, uint8_t** j
     isyntax_image_t* macro_image = isyntax->images + isyntax->macro_image_index;
     return libisyntax_read_assocatiated_image_jpeg(isyntax, macro_image, jpeg_buffer, jpeg_size);
 }
+
+isyntax_error_t libisyntax_read_icc_profile(isyntax_t* isyntax, isyntax_image_t* image, uint8_t** icc_profile_buffer, uint32_t* icc_profile_size) {
+    ASSERT(icc_profile_buffer);
+    ASSERT(icc_profile_size);
+    u8* icc_profile_compressed = isyntax_get_icc_profile(isyntax, image, icc_profile_size);
+    if (icc_profile_compressed) {
+        *icc_profile_buffer = icc_profile_compressed;
+        return LIBISYNTAX_OK;
+    } else {
+        return LIBISYNTAX_FATAL;
+    }
+}

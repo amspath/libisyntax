@@ -307,6 +307,28 @@ u8* isyntax_get_associated_image_jpeg(isyntax_t* isyntax, isyntax_image_t* image
     return decoded;
 }
 
+u8* isyntax_get_icc_profile(isyntax_t* isyntax, isyntax_image_t* image, u32* icc_profile_size) {
+	if (icc_profile_size == NULL) {
+		return NULL;
+	}
+	i64 read_offset = image->base64_encoded_icc_profile_file_offset;
+	size_t read_size = image->base64_encoded_icc_profile_len;
+	u8* decoded = NULL;
+	if (read_offset > 0 && read_size > 0) {
+		u8* encoded = malloc(read_size);
+		size_t bytes_read = file_handle_read_at_offset(encoded, isyntax->file_handle, read_offset, read_size);
+		if (bytes_read == read_size) {
+			size_t len = 0;
+			decoded = base64_decode((u8*)encoded, read_size, &len);
+			if (decoded) {
+				*icc_profile_size = len;
+			}
+		}
+		free(encoded);
+	}
+	return decoded;
+}
+
 static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u32 element, char* value, u64 value_len) {
 
 	switch(group) {
@@ -400,7 +422,16 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 				case 0x0101: /*DICOM_BITS_STORED*/                      {} break;
 				case 0x0102: /*DICOM_HIGH_BIT*/                         {} break;
 				case 0x0103: /*DICOM_PIXEL_REPRESENTATION*/             {} break;
-				case 0x2000: /*DICOM_ICCPROFILE*/                       {} break;
+				case 0x2000: /*DICOM_ICCPROFILE*/                       {
+					size_t decoded_capacity = value_len;
+					size_t decoded_len = 0;
+					char last_char = value[value_len-1];
+					if (last_char == '/') {
+						value_len--; // The last character may cause the base64 decoding to fail if invalid
+					}
+					image->base64_encoded_icc_profile_file_offset = isyntax->parser.content_file_offset;
+					image->base64_encoded_icc_profile_len = value_len;
+				} break;
 				case 0x2110: /*DICOM_LOSSY_IMAGE_COMPRESSION*/          {} break;
 				case 0x2112: /*DICOM_LOSSY_IMAGE_COMPRESSION_RATIO*/    {} break;
 				case 0x2114: /*DICOM_LOSSY_IMAGE_COMPRESSION_METHOD*/   {} break; // "PHILIPS_DP_1_0"
