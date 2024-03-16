@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema
+  Copyright (c) 2019-2024, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -42,7 +42,7 @@
 
 #define CHECK_LIBISYNTAX_OK(_libisyntax_call) do { \
     isyntax_error_t result = _libisyntax_call;     \
-    assert(result == LIBISYNTAX_OK);               \
+    ASSERT(result == LIBISYNTAX_OK);               \
 } while(0);
 
 static platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
