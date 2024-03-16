@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema, Alexandr Virodov, Jonas Teuwen
+  Copyright (c) 2019-2024, Pieter Valkema, Alexandr Virodov, Jonas Teuwen
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -445,7 +445,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    const isyntax_image_t *image = libisyntax_get_image(isyntax, 0);
+    const isyntax_image_t *image = libisyntax_get_wsi_image(isyntax);
 
     // Check if the page we selected actually exists.
     int32_t level_count = libisyntax_image_get_level_count(image);

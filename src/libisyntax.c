@@ -249,12 +249,16 @@ int32_t libisyntax_get_tile_height(const isyntax_t* isyntax) {
     return isyntax->tile_height;
 }
 
-int32_t libisyntax_get_wsi_image_index(const isyntax_t* isyntax) {
-    return isyntax->wsi_image_index;
+const isyntax_image_t* libisyntax_get_wsi_image(const isyntax_t* isyntax) {
+    return isyntax->images + isyntax->wsi_image_index;
 }
 
-const isyntax_image_t* libisyntax_get_image(const isyntax_t* isyntax, int32_t wsi_image_index) {
-    return &isyntax->images[wsi_image_index];
+const isyntax_image_t* libisyntax_get_label_image(const isyntax_t* isyntax) {
+	return isyntax->images + isyntax->label_image_index;
+}
+
+const isyntax_image_t* libisyntax_get_macro_image(const isyntax_t* isyntax) {
+	return isyntax->images + isyntax->label_image_index;
 }
 
 int32_t libisyntax_image_get_level_count(const isyntax_image_t* image) {

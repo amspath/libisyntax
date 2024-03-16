@@ -47,8 +47,9 @@ void            libisyntax_close(isyntax_t* isyntax);
 //== Getters API ==
 int32_t                libisyntax_get_tile_width(const isyntax_t* isyntax);
 int32_t                libisyntax_get_tile_height(const isyntax_t* isyntax);
-int32_t                libisyntax_get_wsi_image_index(const isyntax_t* isyntax);
-const isyntax_image_t* libisyntax_get_image(const isyntax_t* isyntax, int32_t wsi_image_index);
+const isyntax_image_t* libisyntax_get_wsi_image(const isyntax_t* isyntax);
+const isyntax_image_t* libisyntax_get_label_image(const isyntax_t* isyntax);
+const isyntax_image_t* libisyntax_get_macro_image(const isyntax_t* isyntax);
 int32_t                libisyntax_image_get_level_count(const isyntax_image_t* image);
 const isyntax_level_t* libisyntax_image_get_level(const isyntax_image_t* image, int32_t index);
 

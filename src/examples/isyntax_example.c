@@ -15,9 +15,7 @@
 #define LOG_VAR(fmt, var) printf("%s: %s=" fmt "\n", __FUNCTION__, #var, var)
 
 void print_isyntax_levels(isyntax_t* isyntax) {
-    int wsi_image_idx = libisyntax_get_wsi_image_index(isyntax);
-    LOG_VAR("%d", wsi_image_idx);
-    const isyntax_image_t* wsi_image = libisyntax_get_image(isyntax, wsi_image_idx);
+    const isyntax_image_t* wsi_image = libisyntax_get_wsi_image(isyntax);
 
     for (int i = 0; i < libisyntax_image_get_level_count(wsi_image); ++i) {
         const isyntax_level_t* level = libisyntax_image_get_level(wsi_image, i);
