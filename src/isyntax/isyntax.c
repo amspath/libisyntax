@@ -1466,7 +1466,7 @@ static rgba_t ycocg_to_rgb(i32 Y, i32 Co, i32 Cg) {
 	i32 G = tmp + Cg;
 	i32 B = tmp - Co/2;
 	i32 R = B + Co;
-	return (rgba_t){ATMOST(255, R), ATMOST(255, G), ATMOST(255, B), 255};
+	return (rgba_t){{{ATMOST(255, R), ATMOST(255, G), ATMOST(255, B), 255}}};
 }
 
 static rgba_t ycocg_to_bgr(i32 Y, i32 Co, i32 Cg) {
@@ -1474,7 +1474,7 @@ static rgba_t ycocg_to_bgr(i32 Y, i32 Co, i32 Cg) {
 	i32 G = tmp + Cg;
 	i32 B = tmp - Co/2;
 	i32 R = B + Co;
-	return (rgba_t){ATMOST(255, B), ATMOST(255, G), ATMOST(255, R), 255};
+	return (rgba_t){{{ATMOST(255, B), ATMOST(255, G), ATMOST(255, R), 255}}};
 }
 
 static void convert_ycocg_to_bgra_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg, i32 width, i32 height, i32 stride, u32* out_bgra) {
