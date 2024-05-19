@@ -37,6 +37,7 @@
 #endif
 
 #include <stdint.h>
+#include <inttypes.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -221,7 +222,7 @@ uint64_t parse_cache_size(const char *size_str) {
     uint64_t size;
     char unit;
 
-    if (sscanf(size_str, "%lld%c", &size, &unit) == 2) {
+    if (sscanf(size_str, "%"PRIu64"%c", &size, &unit) == 2) {
         if (unit == 'M') {
             if (size > INT64_MAX / (1024)) {
                 printf("Error: Cache size too large.\n");
@@ -238,7 +239,7 @@ uint64_t parse_cache_size(const char *size_str) {
             printf("Error: Invalid unit for cache size. Use 'M' for megabytes or 'G' for gigabytes.\n");
             return -1;
         }
-    } else if (sscanf(size_str, "%lld", &size) != 1) {
+    } else if (sscanf(size_str, "%"PRIu64, &size) != 1) {
         printf("Error: Invalid cache size format.\n");
         return -1;
     }
@@ -426,7 +427,7 @@ int main(int argc, char **argv) {
 
     isyntax_cache_t *isyntax_cache = NULL;
     if (libisyntax_cache_create("isyntax-to-tiff cache", cache_size, &isyntax_cache) != LIBISYNTAX_OK) {
-        fprintf(stderr, "Failed to create iSyntax cache with size %llu.\n", cache_size);
+        fprintf(stderr, "Failed to create iSyntax cache with size %"PRIu64".\n", cache_size);
         libisyntax_close(isyntax);
         return -1;
     }

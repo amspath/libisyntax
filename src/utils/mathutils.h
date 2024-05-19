@@ -60,7 +60,7 @@ typedef struct rgba_t {
 		u8 values[4];
 	};
 } rgba_t;
-FORCE_INLINE rgba_t RGBA(u8 r, u8 g, u8 b, u8 a) {rgba_t rgba = {r, g, b, a}; return rgba; }
+FORCE_INLINE rgba_t RGBA(u8 r, u8 g, u8 b, u8 a) {rgba_t rgba = {{{r, g, b, a}}}; return rgba; }
 
 #ifndef V2F_DEFINED
 #define V2F_DEFINED
@@ -77,7 +77,7 @@ typedef struct v3f {
 		float values[3];
 	};
 } v3f;
-FORCE_INLINE v3f V3F(float x, float y, float z) {v3f v = {x, y, z}; return v; }
+FORCE_INLINE v3f V3F(float x, float y, float z) {v3f v = {{{x, y, z}}}; return v; }
 
 #ifndef V4F_DEFINED
 #define V4F_DEFINED
@@ -89,7 +89,7 @@ typedef struct v4f {
 	};
 } v4f;
 #endif
-FORCE_INLINE v4f V4F(float x, float y, float z, float w) {v4f v = {x, y, z, w}; return v; }
+FORCE_INLINE v4f V4F(float x, float y, float z, float w) {v4f v = {{{x, y, z, w}}}; return v; }
 
 typedef struct bounds2i {
 	union {
@@ -97,7 +97,7 @@ typedef struct bounds2i {
 		struct { v2i min, max; };
 	};
 } bounds2i;
-FORCE_INLINE bounds2i BOUNDS2I(i32 left, i32 top, i32 right, i32 bottom) {bounds2i b = {left, top, right, bottom}; return b;}
+FORCE_INLINE bounds2i BOUNDS2I(i32 left, i32 top, i32 right, i32 bottom) {bounds2i b = {{{left, top, right, bottom}}}; return b;}
 
 
 typedef struct bounds2f {
@@ -106,7 +106,7 @@ typedef struct bounds2f {
 		struct { v2f min, max; };
 	};
 } bounds2f;
-FORCE_INLINE bounds2f BOUNDS2F(float left, float top, float right, float bottom) {bounds2f b = {left, top, right, bottom}; return b;}
+FORCE_INLINE bounds2f BOUNDS2F(float left, float top, float right, float bottom) {bounds2f b = {{{left, top, right, bottom}}}; return b;}
 
 
 typedef enum corner_enum {
