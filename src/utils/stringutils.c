@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema
+  Copyright (c) 2019-2024, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -67,7 +67,7 @@ const char* one_past_last_slash(const char* s, i32 max) {
 		}
 	}
 	const char* result = pos + 1; // gone back one too far
-	ASSERT(stripped_len > 0 && stripped_len <= len);
+	ASSERT(stripped_len >= 0 && stripped_len <= len);
 	return result;
 }
 
