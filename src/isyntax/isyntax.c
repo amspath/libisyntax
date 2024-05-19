@@ -701,7 +701,7 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 							goto decoding_cluster_header_table_failed;
 						}
 						// pass 1: check how many clusters there are
-						i32 cluster_count = 0;
+						i32 cluster_count = 1;
 						for (;;) {
 							u8* next_sequence_element_pos = pos + sizeof(isyntax_dicom_tag_header_t) + ((isyntax_dicom_tag_header_t*)pos)->size;
 							isyntax_dicom_tag_header_t* next_sequence_element = (isyntax_dicom_tag_header_t*)next_sequence_element_pos;
