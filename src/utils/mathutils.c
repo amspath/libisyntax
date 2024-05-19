@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema
+  Copyright (c) 2019-2024, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -28,6 +28,8 @@
 #include "common.h"
 #define MATHUTILS_IMPL
 #include "mathutils.h"
+
+#include "float.h"
 
 rect2i clip_rect(rect2i* first, rect2i* second) {
 	i32 x0 = MAX(first->x, second->x);
@@ -215,7 +217,7 @@ bounds2f bounds_from_points(v2f* points, i32 point_count) {
 	return bounds;
 }
 
-polygon4f rotated_rectangle(float width, float height, float rotation) {
+polygon4v2f rotated_rectangle(float width, float height, float rotation) {
 	float sin_theta = sinf(rotation);
 	float cos_theta = cosf(rotation);
 
@@ -224,7 +226,7 @@ polygon4f rotated_rectangle(float width, float height, float rotation) {
 	float bottom = 0.5f * height;
 	float top = -bottom;
 
-	polygon4f result = { .values = {
+	polygon4v2f result = { .values = {
 			{left * cos_theta - top * sin_theta, top * cos_theta + left * sin_theta }, // top left
 			{right * cos_theta - top * sin_theta, top * cos_theta + right * sin_theta }, // top right
 			{left * cos_theta - bottom * sin_theta, bottom * cos_theta + left * sin_theta }, // bottom left
