@@ -261,6 +261,10 @@ const isyntax_image_t* libisyntax_get_macro_image(const isyntax_t* isyntax) {
 	return isyntax->images + isyntax->label_image_index;
 }
 
+const char* libisyntax_get_barcode(const isyntax_t* isyntax) {
+	return isyntax->barcode;
+}
+
 int32_t libisyntax_image_get_level_count(const isyntax_image_t* image) {
     return image->level_count;
 }

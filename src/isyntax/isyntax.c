@@ -155,6 +155,21 @@ unsigned char * base64_decode(const unsigned char *src, size_t len,
 }
 // end of base64 decoder.
 
+// Wrapper for base64_decode, taking into account possible extra (invalid) characters at the end
+u8* isyntax_base64_decode(const char* src, size_t len, size_t *out_len) {
+	char last_char = src[len-1];
+	if (last_char == '/') {
+		len--; // The last character may cause the base64 decoding to fail if invalid
+		last_char = src[len-1];
+	}
+	while (last_char == '\n' || last_char == '\r' || last_char == ' ') {
+		--len;
+		last_char = src[len-1];
+	}
+	u8* decoded = base64_decode((u8*)src, len, out_len);
+	return decoded;
+}
+
 // similar to atoi(), but also returning the string position so we can chain calls one after another.
 static const char* atoi_and_advance(const char* str, i32* dest) {
 	i32 num = 0;
@@ -376,7 +391,14 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 					// Value will likely be "5.0" for v1 iSyntax files, "100.5" for v2 iSyntax files
 					isyntax->data_model_major_version = atoi(value);
 				} break;
-				case 0x1002: /*PIM_DP_UFS_BARCODE*/                    {} break; // "<base64-encoded barcode value>"
+				case 0x1002: /*PIM_DP_UFS_BARCODE*/                    {
+					size_t decoded_len = 0;
+					char* decoded = (char*) isyntax_base64_decode(value, value_len, &decoded_len);
+					if (decoded) {
+						memcpy(isyntax->barcode, decoded, MIN(decoded_len, sizeof(isyntax->barcode)-1));
+						free(decoded);
+					}
+				} break; // "<base64-encoded barcode value>"
 				case 0x1003: /*PIM_DP_SCANNED_IMAGES*/                 {} break;
 				case 0x1010: /*PIM_DP_SCANNER_RACK_PRIORITY*/          {} break; // "<u16>"
 			}
@@ -586,23 +608,13 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 				case 0x2013: /*UFS_IMAGE_PIXEL_TRANSFORMATION_METHOD*/      {} break;
 				case 0x2014: { /*UFS_IMAGE_BLOCK_HEADER_TABLE*/      // data model <100
 					// NOTE: mutually exclusive with UFS_IMAGE_BLOCK_HEADERS (either one or the other must be present)
-					size_t decoded_capacity = value_len;
-					size_t decoded_len = 0;
-					i32 last_char = value[value_len-1];
 /*
 					FILE* test_out = file_stream_open_for_writing("test_b64.out");
 					file_stream_write(value, value_len, test_out);
 					file_stream_close(test_out);
 */
-					if (last_char == '/') {
-						value_len--; // The last character may cause the base64 decoding to fail if invalid
-						last_char = value[value_len-1];
-					}
-					while (last_char == '\n' || last_char == '\r' || last_char == ' ') {
-						--value_len;
-						last_char = value[value_len-1];
-					}
-					u8* decoded = base64_decode((u8*)value, value_len, &decoded_len);
+					size_t decoded_len = 0;
+					u8* decoded = isyntax_base64_decode(value, value_len, &decoded_len);
 					if (decoded) {
 
 						u32 header_size = *(u32*) decoded + 0;
@@ -670,23 +682,13 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 				case 0x2016: /*UFS_IMAGE_CLUSTER_HEADER_TEMPLATES*/ {} break; // data model >= 100
 				case 0x2017: /*UFS_IMAGE_DIMENSIONS_OVER_CLUSTER*/  {} break;
 				case 0x201F: /*UFS_IMAGE_CLUSTER_HEADER_TABLE*/ { // data model >= 100
-					size_t decoded_capacity = value_len;
-					size_t decoded_len = 0;
-					i32 last_char = value[value_len-1];
 /*
 					FILE* test_out = file_stream_open_for_writing("test_b64.out");
 					file_stream_write(value, value_len, test_out);
 					file_stream_close(test_out);
 */
-					if (last_char == '/') {
-						value_len--; // The last character may cause the base64 decoding to fail if invalid
-						last_char = value[value_len-1];
-					}
-					while (last_char == '\n' || last_char == '\r' || last_char == ' ') {
-						--value_len;
-						last_char = value[value_len-1];
-					}
-					u8* decoded = base64_decode((u8*)value, value_len, &decoded_len);
+					size_t decoded_len = 0;
+					u8* decoded = isyntax_base64_decode(value, value_len, &decoded_len);
 					if (decoded) {
 						u8* decoded_end = decoded + decoded_len;
 						u32 header_size = *(u32*) decoded + 0;
