@@ -33,6 +33,14 @@ enum isyntax_pixel_format_t {
   _LIBISYNTAX_PIXEL_FORMAT_END,
 };
 
+enum libisyntax_open_flags_t {
+	// Set this flag to also initialize the allocators needed for tile loading.
+	LIBISYNTAX_OPEN_FLAG_INIT_ALLOCATORS = 1,
+
+	// Set this flag to only read the barcode, then abort (if you only need the barcode, this will be faster).
+	LIBISYNTAX_OPEN_FLAG_READ_BARCODE_ONLY = 2,
+};
+
 typedef struct isyntax_t isyntax_t;
 typedef struct isyntax_image_t isyntax_image_t;
 typedef struct isyntax_level_t isyntax_level_t;
@@ -41,7 +49,7 @@ typedef struct isyntax_cache_t isyntax_cache_t;
 //== Common API ==
 // TODO(avirodov): are repeated calls of libisyntax_init() allowed? Currently I believe not.
 isyntax_error_t libisyntax_init();
-isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax);
+isyntax_error_t libisyntax_open(const char* filename, enum libisyntax_open_flags_t flags, isyntax_t** out_isyntax);
 void            libisyntax_close(isyntax_t* isyntax);
 
 //== Getters API ==
