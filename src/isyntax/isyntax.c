@@ -391,14 +391,16 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 					// Value will likely be "5.0" for v1 iSyntax files, "100.5" for v2 iSyntax files
 					isyntax->data_model_major_version = atoi(value);
 				} break;
-				case 0x1002: /*PIM_DP_UFS_BARCODE*/                    {
+				case 0x1002: /*PIM_DP_UFS_BARCODE*/ {
+					// "<base64-encoded barcode value>"
 					size_t decoded_len = 0;
 					char* decoded = (char*) isyntax_base64_decode(value, value_len, &decoded_len);
 					if (decoded) {
 						memcpy(isyntax->barcode, decoded, MIN(decoded_len, sizeof(isyntax->barcode)-1));
 						free(decoded);
 					}
-				} break; // "<base64-encoded barcode value>"
+					isyntax->is_barcode_read = true;
+				} break;
 				case 0x1003: /*PIM_DP_SCANNED_IMAGES*/                 {} break;
 				case 0x1010: /*PIM_DP_SCANNER_RACK_PRIORITY*/          {} break; // "<u16>"
 			}
@@ -999,6 +1001,9 @@ static bool isyntax_parse_xml_header(isyntax_t* isyntax, char* xml_header, i64 c
 		if (c == '\0') {
 			// This should never trigger; iSyntax file is corrupt!
 			return isyntax_parse_xml_header_failure(isyntax);
+		}
+		if (isyntax->open_flags & LIBISYNTAX_OPEN_FLAG_READ_BARCODE_ONLY && isyntax->is_barcode_read) {
+			return isyntax_parse_xml_header_failure(isyntax); // abort early, return as if failed
 		}
 		yxml_ret_t r = yxml_parse(x, c);
 		if (r == YXML_OK) {
@@ -2955,10 +2960,12 @@ void isyntax_set_work_queue(isyntax_t* isyntax, work_queue_t* work_queue) {
 }
 
 
-bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators) {
+bool isyntax_open(isyntax_t* isyntax, const char* filename, enum libisyntax_open_flags_t flags) {
 
 	console_print_verbose("Attempting to open iSyntax: %s\n", filename);
 	ASSERT(isyntax);
+
+	isyntax->open_flags = flags;
 
 	int ret = 0; (void)ret;
 	file_stream_t fp = file_stream_open_for_reading(filename);
@@ -2979,6 +2986,9 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 				isyntax_level_t* level = wsi_image->levels + i;
 				if (level->tiles != NULL) free(level->tiles);
 			}
+		}
+		if (isyntax->open_flags & LIBISYNTAX_OPEN_FLAG_READ_BARCODE_ONLY && isyntax->is_barcode_read) {
+			success = true; // Aborted early on purpose for fast barcode reading.
 		}
 		return success;
 	}
@@ -3407,7 +3417,7 @@ bool isyntax_open(isyntax_t* isyntax, const char* filename, bool init_allocators
 			size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
 			size_t h_coeff_block_size = ll_coeff_block_size * 3;
 			size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
-			if (init_allocators) {
+			if (flags & LIBISYNTAX_OPEN_FLAG_INIT_ALLOCATORS) {
 				isyntax->ll_coeff_block_allocator = malloc(sizeof(block_allocator_t));
 				isyntax->h_coeff_block_allocator = malloc(sizeof(block_allocator_t));
 				*isyntax->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));

@@ -81,6 +81,9 @@ endif()
 add_library(isyntax ${LIBISYNTAX_COMMON_SOURCE_FILES})
 
 if (WIN32)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static-libgcc -static")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -static-libgcc -static")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} -static-libgcc -static")
     target_link_libraries(isyntax winmm)
 else()
     find_package(Threads REQUIRED)
@@ -114,6 +117,9 @@ else()
     target_link_libraries(isyntax-to-tiff isyntax ${TIFF_LIBRARIES})
 endif()
 
+# Build example program: isyntax_dirwalk.c
+add_executable(isyntax-dirwalk src/examples/isyntax_dirwalk.c)
+target_link_libraries(isyntax-dirwalk isyntax)
 
 # TODO(avirodov): Consider moving testing to its own test/CMakeLists. This will require moving the library building
 #   to src/CMakeLists to avoid circular deps.
