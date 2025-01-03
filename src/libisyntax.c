@@ -220,13 +220,13 @@ isyntax_error_t libisyntax_init() {
     return LIBISYNTAX_OK;
 }
 
-isyntax_error_t libisyntax_open(const char* filename, int32_t is_init_allocators, isyntax_t** out_isyntax) {
+isyntax_error_t libisyntax_open(const char* filename, enum libisyntax_open_flags_t flags, isyntax_t** out_isyntax) {
     // Note(avirodov): intentionally not changing api of isyntax_open. We can do that later if needed and reduce
     // the size/count of wrappers.
     isyntax_t* result = malloc(sizeof(isyntax_t));
     memset(result, 0, sizeof(*result));
 
-    bool success = isyntax_open(result, filename, is_init_allocators);
+    bool success = isyntax_open(result, filename, flags);
     if (success) {
         *out_isyntax = result;
         return LIBISYNTAX_OK;
