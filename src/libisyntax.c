@@ -282,7 +282,7 @@ const isyntax_image_t* libisyntax_get_label_image(const isyntax_t* isyntax) {
 }
 
 const isyntax_image_t* libisyntax_get_macro_image(const isyntax_t* isyntax) {
-	return isyntax->images + isyntax->label_image_index;
+	return isyntax->images + isyntax->macro_image_index;
 }
 
 const char* libisyntax_get_barcode(const isyntax_t* isyntax) {
