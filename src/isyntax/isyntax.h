@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2024, Pieter Valkema
+  Copyright (c) 2019-2025, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -394,12 +394,13 @@ typedef struct isyntax_t {
 	icoeff_t* white_dummy_coeff;
 	block_allocator_t* ll_coeff_block_allocator;
 	block_allocator_t* h_coeff_block_allocator;
-    bool32 is_block_allocator_owned;
+    bool is_block_allocator_owned;
 	float loading_time;
 	float total_rgb_transform_time;
 	i32 data_model_major_version; // <100 (usually 5) for iSyntax format v1, >= 100 for iSyntax format v2
 	char barcode[64];
 	bool is_barcode_read;
+	isyntax_cache_t* cache;
 	work_queue_t* work_submission_queue;
 	volatile i32 refcount;
 } isyntax_t;

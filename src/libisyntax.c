@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2024, Pieter Valkema
+  Copyright (c) 2019-2025, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -25,10 +25,27 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+// To compile without implementing stb_printf.h:
+// #define LIBISYNTAX_NO_STB_SPRINTF_IMPLEMENTATION
+
+// To compile without implementing stb_image.h.:
+// #define LIBISYNTAX_NO_STB_IMAGE_IMPLEMENTATION
+
+// To compile without implementing thread pool routines (in case you want to supply your own):
+// #define LIBISYNTAX_NO_THREAD_POOL_IMPLEMENTATION
+
+#if __has_include("config.h")
+#include "config.h"
+#endif
+
+#ifndef LIBISYNTAX_NO_STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_IMPLEMENTATION
+#endif
 #include "stb_sprintf.h"
 
+#ifndef LIBISYNTAX_NO_STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
+#endif
 #include "stb_image.h"
 
 #include "common.h"
@@ -44,6 +61,9 @@
     isyntax_error_t result = _libisyntax_call;     \
     ASSERT(result == LIBISYNTAX_OK);               \
 } while(0);
+
+
+#ifndef LIBISYNTAX_NO_THREAD_POOL_IMPLEMENTATION
 
 static platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
 
@@ -169,6 +189,8 @@ static void init_thread_pool() {
 
 #endif
 
+#endif //LIBISYNTAX_NO_THREAD_POOL_IMPLEMENTATION
+
 // TODO(avirodov): int may be too small for some counters later on.
 // TODO(avirodov): should make a flag to turn counters off, they may have overhead.
 // TODO(avirodov): struct? move to isyntax.h/.c?
@@ -210,10 +232,12 @@ isyntax_error_t libisyntax_init() {
     static bool libisyntax_global_init_complete = false;
 
     if (libisyntax_global_init_complete == false) {
+#ifndef LIBISYNTAX_NO_THREAD_POOL_IMPLEMENTATION
         // Actual initialization.
         get_system_info(false);
         DBGCTR_COUNT(dbgctr_init_thread_pool_counter);
         init_thread_pool();
+#endif
         libisyntax_global_init_complete = true;
     }
     benaphore_unlock(libisyntax_get_global_mutex());
@@ -322,40 +346,40 @@ isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_
         return LIBISYNTAX_INVALID_ARGUMENT;
     }
 
-    if (!isyntax_cache->h_coeff_block_allocator.is_valid || !isyntax_cache->ll_coeff_block_allocator.is_valid) {
-        // Shouldn't ever partially initialize.
-        ASSERT(!isyntax_cache->h_coeff_block_allocator.is_valid);
-        ASSERT(!isyntax_cache->ll_coeff_block_allocator.is_valid);
-
-        isyntax_cache->allocator_block_width = isyntax->block_width;
-        isyntax_cache->allocator_block_height = isyntax->block_height;
-        size_t ll_coeff_block_size = isyntax->block_width * isyntax->block_height * sizeof(icoeff_t);
-        size_t block_allocator_maximum_capacity_in_blocks = GIGABYTES(32) / ll_coeff_block_size;
-        size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
-        size_t h_coeff_block_size = ll_coeff_block_size * 3;
-        size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
-        isyntax_cache->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-        isyntax_cache->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-    }
+    isyntax_cache->allocator_block_width = isyntax->block_width;
+    isyntax_cache->allocator_block_height = isyntax->block_height;
+    size_t ll_coeff_block_size = isyntax->block_width * isyntax->block_height * sizeof(icoeff_t);
+    size_t block_allocator_maximum_capacity_in_blocks = GIGABYTES(32) / ll_coeff_block_size;
+    size_t ll_coeff_block_allocator_capacity_in_blocks = block_allocator_maximum_capacity_in_blocks / 4;
+    size_t h_coeff_block_size = ll_coeff_block_size * 3;
+    size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
+    isyntax_cache->ll_coeff_block_allocator = malloc(sizeof(block_allocator_t));
+    isyntax_cache->h_coeff_block_allocator = malloc(sizeof(block_allocator_t));
+    *isyntax_cache->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+    *isyntax_cache->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+    isyntax_cache->is_block_allocator_owned = true;
 
     if (isyntax_cache->allocator_block_width != isyntax->block_width ||
             isyntax_cache->allocator_block_height != isyntax->block_height) {
         return LIBISYNTAX_FATAL; // Not implemented, see todo in libisyntax.h.
     }
 
-    isyntax->ll_coeff_block_allocator = &isyntax_cache->ll_coeff_block_allocator;
-    isyntax->h_coeff_block_allocator = &isyntax_cache->h_coeff_block_allocator;
+    isyntax->ll_coeff_block_allocator = isyntax_cache->ll_coeff_block_allocator;
+    isyntax->h_coeff_block_allocator = isyntax_cache->h_coeff_block_allocator;
     isyntax->is_block_allocator_owned = false;
     return LIBISYNTAX_OK;
 }
 
 void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
-    if (isyntax_cache->ll_coeff_block_allocator.is_valid) {
-        block_allocator_destroy(&isyntax_cache->ll_coeff_block_allocator);
+    if (isyntax_cache->is_block_allocator_owned) {
+        if (isyntax_cache->ll_coeff_block_allocator->is_valid) {
+            block_allocator_destroy(isyntax_cache->ll_coeff_block_allocator);
+        }
+        if (isyntax_cache->h_coeff_block_allocator->is_valid) {
+            block_allocator_destroy(isyntax_cache->h_coeff_block_allocator);
+        }
     }
-    if (isyntax_cache->h_coeff_block_allocator.is_valid) {
-        block_allocator_destroy(&isyntax_cache->h_coeff_block_allocator);
-    }
+
     benaphore_destroy(&isyntax_cache->mutex);
     free(isyntax_cache);
 }
@@ -400,10 +424,39 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     int32_t tile_width = isyntax->tile_width;
     int32_t tile_height = isyntax->tile_height;
 
-    int64_t start_tile_x = x / tile_width;
-    int64_t end_tile_x = (x + width - 1) / tile_width;
-    int64_t start_tile_y = y / tile_height;
-    int64_t end_tile_y = (y + height - 1) / tile_height;
+    int64_t start_tile_x;
+    int64_t end_tile_x;
+    int64_t x_remainder;
+    int64_t x_remainder_last;
+
+    if (x > 0) {
+        start_tile_x = x / tile_width;
+        end_tile_x = (x + width - 1) / tile_width;
+        x_remainder = x % tile_width;
+        x_remainder_last = (x + width - 1) % tile_width;
+    } else {
+        start_tile_x = -(-x / tile_width);
+        end_tile_x = -(-(x + width - 1) / tile_width);
+        x_remainder = (x % tile_width + tile_width) % tile_width;
+        x_remainder_last = ((x + width - 1) % tile_width + tile_width) % tile_width;
+    }
+
+    int64_t start_tile_y;
+    int64_t end_tile_y;
+    int64_t y_remainder;
+    int64_t y_remainder_last;
+
+    if (y > 0) {
+        start_tile_y = y / tile_height;
+        end_tile_y = (y + height - 1) / tile_height;
+        y_remainder = y % tile_height;
+        y_remainder_last = (y + height - 1) % tile_height;
+    } else {
+        start_tile_y = -(-y / tile_height);
+        end_tile_y = -(-(y + height - 1) / tile_height);
+        y_remainder = (y % tile_height + tile_height) % tile_height;
+        y_remainder_last = ((y + height - 1) % tile_height + tile_height) % tile_height;
+    }
 
     // Allocate memory for tile pixels (will reuse for consecutive libisyntax_tile_read() calls)
     uint32_t* tile_pixels = (uint32_t*)malloc(tile_width * tile_height * sizeof(uint32_t));
@@ -412,17 +465,14 @@ isyntax_error_t libisyntax_read_region(isyntax_t* isyntax, isyntax_cache_t* isyn
     for (int64_t tile_y = start_tile_y; tile_y <= end_tile_y; ++tile_y) {
         for (int64_t tile_x = start_tile_x; tile_x <= end_tile_x; ++tile_x) {
             // Calculate the portion of the tile to be copied
-            int64_t src_x = (tile_x == start_tile_x) ? x % tile_width : 0;
-            int64_t src_y = (tile_y == start_tile_y) ? y % tile_height : 0;
-            int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - (x % tile_width);
-            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height - (y % tile_height);
-            int64_t copy_width = (tile_x == end_tile_x) ? (x + width - 1) % tile_width - src_x + 1 : tile_width - src_x;
-            int64_t copy_height = (tile_y == end_tile_y) ? (y + height - 1) % tile_height - src_y + 1 : tile_height - src_y;
+            int64_t src_x = (tile_x == start_tile_x) ? x_remainder : 0;
+            int64_t src_y = (tile_y == start_tile_y) ? y_remainder : 0;
+            int64_t dest_x = (tile_x == start_tile_x) ? 0 : (tile_x - start_tile_x) * tile_width - x_remainder;
+            int64_t dest_y = (tile_y == start_tile_y) ? 0 : (tile_y - start_tile_y) * tile_height - y_remainder;
+            int64_t copy_width = (tile_x == end_tile_x) ? x_remainder_last - src_x + 1 : tile_width - src_x;
+            int64_t copy_height = (tile_y == end_tile_y) ? y_remainder_last - src_y + 1 : tile_height - src_y;
 
             // Read tile
-            // TODO(pvalkema): be more robust here
-            ASSERT(tile_x < current_level->width_in_tiles);
-            ASSERT(tile_y < current_level->height_in_tiles);
             CHECK_LIBISYNTAX_OK(libisyntax_tile_read(isyntax, isyntax_cache, level, tile_x, tile_y, tile_pixels, pixel_format));
 
             // Copy the relevant portion of the tile to the region

@@ -73,7 +73,7 @@ void block_allocator_destroy(block_allocator_t* allocator) {
 	if (allocator->chunks) free(allocator->chunks);
 	if (allocator->free_list_storage) free(allocator->free_list_storage);
 	benaphore_destroy(&allocator->lock);
-	memset(allocator, 0, sizeof(block_allocator_t));
+    free(allocator);
 }
 
 void* block_alloc(block_allocator_t* allocator) {

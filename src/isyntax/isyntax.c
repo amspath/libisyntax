@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2024, Pieter Valkema
+  Copyright (c) 2019-2025, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -3537,6 +3537,9 @@ void isyntax_destroy(isyntax_t* isyntax) {
 				}
 			}
 		}
+	}
+	if (isyntax->cache) {
+		libisyntax_cache_destroy(isyntax->cache);
 	}
 	file_handle_close(isyntax->file_handle);
 }
