@@ -293,6 +293,14 @@ int32_t libisyntax_image_get_level_count(const isyntax_image_t* image) {
     return image->level_count;
 }
 
+int32_t libisyntax_image_get_offset_x(const isyntax_image_t* image) {
+    return image->offset_x;
+}
+
+int32_t libisyntax_image_get_offset_y(const isyntax_image_t* image) {
+    return image->offset_y;
+}
+
 const isyntax_level_t* libisyntax_image_get_level(const isyntax_image_t* image, int32_t index) {
     return &image->levels[index];
 }
