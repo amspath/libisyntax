@@ -621,13 +621,15 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 					strncpy(isyntax->image_dimension_unit, value, MIN(value_len, sizeof(isyntax->image_dimension_unit) - 1));
 					isyntax->image_dimension_unit[MIN(value_len, sizeof(isyntax->image_dimension_unit) - 1)] = '\0';				} break;
 				case 0x2007: /*UFS_IMAGE_DIMENSION_SCALE_FACTOR*/           {
-					float mpp = atof(value);
-					if (isyntax->parser.dimension_index == 0 /*x*/) {
-						isyntax->mpp_x = mpp;
-						isyntax->is_mpp_known = true;
-					} else if (isyntax->parser.dimension_index == 1 /*y*/) {
-						isyntax->mpp_y = mpp;
-						isyntax->is_mpp_known = true;
+					if (isyntax->parser.current_image_type == ISYNTAX_IMAGE_TYPE_WSI) {
+						float mpp = atof(value);
+						if (isyntax->parser.dimension_index == 0 /*x*/) {
+							isyntax->mpp_x = mpp;
+							isyntax->is_mpp_known = true;
+						} else if (isyntax->parser.dimension_index == 1 /*y*/) {
+							isyntax->mpp_y = mpp;
+							isyntax->is_mpp_known = true;
+						}
 					}
 				} break;
 				case 0x2008: /*UFS_IMAGE_DIMENSION_DISCRETE_VALUES_STRING*/ {} break;
