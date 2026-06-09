@@ -128,6 +128,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include <inttypes.h>
 
 #if COMPILER_MSVC
 #include <io.h>

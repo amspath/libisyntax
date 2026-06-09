@@ -476,7 +476,8 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 				} break;
 				case 0x1001: /*PIM_DP_UFS_INTERFACE_VERSION*/          {
 					// Value will likely be "5.0" for v1 iSyntax files, "100.5" for v2 iSyntax files
-					isyntax->data_model_major_version = atoi(value);
+					if (sscanf(value, "%" SCNd32 ".%" SCNd32, &isyntax->data_model_major_version, &isyntax->data_model_minor_version) != 2)
+						isyntax->data_model_minor_version = 0;
 				} break;
 				case 0x1002: /*PIM_DP_UFS_BARCODE*/ {
 					// "<base64-encoded barcode value>"
@@ -3675,5 +3676,3 @@ void isyntax_destroy(isyntax_t* isyntax) {
 	}
 	file_handle_close(isyntax->file_handle);
 }
-
-
