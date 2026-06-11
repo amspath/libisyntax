@@ -1,5 +1,6 @@
 project(
   'libisyntax', 'c', 'cpp',
+  version: '0.1.0',
   license : 'BSD-2-Clause',
   meson_version : '>=0.51.0',
   default_options : [
@@ -78,6 +79,10 @@ libisyntax_dep = declare_dependency(
   include_directories : include_directories('src'),
   link_with : isyntax,
 )
+
+pkg = import('pkgconfig')
+pkg.generate(isyntax)
+install_headers('src/libisyntax.h')
 
 isyntax_example = executable(
   'isyntax_example',
