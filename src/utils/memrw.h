@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema
+  Copyright (c) 2019-2026, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -39,6 +39,7 @@ typedef struct memrw_t {
 	u64 used_size;
 	u64 used_count;
 	u64 capacity;
+    bool is_growing_disallowed;
 } memrw_t;
 
 
@@ -51,6 +52,7 @@ void memrw_seek(memrw_t* buffer, i64 offset);
 i64 memrw_write(const void* src, memrw_t* buffer, i64 bytes_to_write);
 i64 memrw_putc(i64 c, memrw_t* buffer);
 i64 memrw_write_string(const char* s, memrw_t* buffer);
+i64 memrw_write_string_urlencode(const char* s, memrw_t* buffer);
 i64 memrw_string_pool_push(memrw_t* buffer, const char* s);
 i64 memrw_printf(memrw_t* buffer, const char* fmt, ...);
 #define memrw_write_literal(s, buffer) memrw_write((s), (buffer), COUNT(s)-1)

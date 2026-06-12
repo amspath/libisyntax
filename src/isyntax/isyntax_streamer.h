@@ -57,14 +57,14 @@ typedef struct isyntax_streamer_t {
 	bool is_cropped;
 //	zoom_state_t zoom;
 	i32 zoom_level;
-	work_queue_t* tile_completion_queue;
-	work_queue_callback_t* tile_completion_callback;
-	u32 tile_completion_task_identifier;
+	completion_queue_t* tile_completion_queue;
+	completion_event_kind_t tile_completed_event_kind;
     enum isyntax_pixel_format_t pixel_format;
 } isyntax_streamer_t;
 
 
 void isyntax_begin_first_load(isyntax_streamer_t* streamer);
+void isyntax_do_first_load_immediately(isyntax_t* isyntax, isyntax_image_t* wsi, i32 resource_id, completion_event_kind_t tile_completed_event_kind);
 void isyntax_begin_load_tile(isyntax_streamer_t* streamer, i32 scale, i32 tile_x, i32 tile_y);
 
 

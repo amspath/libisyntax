@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema
+  Copyright (c) 2019-2026, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -33,7 +33,7 @@ extern "C" {
 #endif
 
 #include "common.h"
-#include "platform.h" // for benaphore
+#include "platform_mutex.h"
 
 // See:
 // https://github.com/SasLuca/rayfork/blob/rayfork-0.9/source/core/rayfork-core.c
@@ -74,11 +74,11 @@ typedef struct block_allocator_t {
 	block_allocator_item_t* free_list_storage;
 	block_allocator_item_t* free_list;
 	i32 free_list_length;
-	benaphore_t lock;
+	platform_mutex_t lock;
 	bool is_valid;
 } block_allocator_t;
 
-block_allocator_t block_allocator_create(size_t block_size, size_t max_capacity_in_blocks, size_t chunk_size);
+void block_allocator_init(block_allocator_t* allocator, size_t block_size, size_t max_capacity_in_blocks, size_t chunk_size);
 void block_allocator_destroy(block_allocator_t* allocator);
 void* block_alloc(block_allocator_t* allocator);
 void block_free(block_allocator_t* allocator, void* ptr_to_free);

@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2024, Pieter Valkema
+  Copyright (c) 2019-2026, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -37,6 +37,40 @@
 #include <sys/sysctl.h> // for sysctlbyname()
 #endif
 
+#if WINDOWS
+static BOOL CALLBACK platform_call_once_windows_callback(PINIT_ONCE once, PVOID parameter, PVOID* context) {
+	(void)once;
+	(void)context;
+	platform_once_callback_t* callback = (platform_once_callback_t*)parameter;
+	callback();
+	return TRUE;
+}
+#endif
+
+void platform_call_once(platform_once_t* once, platform_once_callback_t* callback) {
+#if WINDOWS
+	if (!InitOnceExecuteOnce(once, platform_call_once_windows_callback, callback, NULL)) {
+		fatal_error("InitOnceExecuteOnce failed");
+	}
+#else
+	int rc = pthread_once(once, callback);
+	if (rc != 0) {
+		fatal_error("pthread_once failed");
+	}
+#endif
+}
+
+static platform_once_t global_system_info_once = PLATFORM_ONCE_INIT;
+static bool is_get_system_info_verbose;
+
+static void init_global_system_info_once(void) {
+	global_system_info = get_system_info(is_get_system_info_verbose);
+}
+
+void init_global_system_info(bool verbose) {
+	is_get_system_info_verbose = verbose;
+	platform_call_once(&global_system_info_once, init_global_system_info_once);
+}
 
 
 mem_t* platform_allocate_mem_buffer(size_t capacity) {
@@ -44,6 +78,7 @@ mem_t* platform_allocate_mem_buffer(size_t capacity) {
 	mem_t* result = (mem_t*) malloc(allocation_size);
 	result->len = 0;
 	result->capacity = capacity;
+    result->cursor = 0;
 	return result;
 }
 
@@ -59,6 +94,7 @@ mem_t* platform_read_entire_file(const char* filename) {
 				((u8*)result)[allocation_size-1] = '\0';
 				result->len = filesize;
 				result->capacity = filesize;
+                result->cursor = 0;
 				size_t bytes_read = file_stream_read(result->data, filesize, fp);
 				if (bytes_read != filesize) {
 					fatal_error();
@@ -70,6 +106,36 @@ mem_t* platform_read_entire_file(const char* filename) {
 	return result;
 }
 
+i64 mem_write(void* src, mem_t* mem, size_t bytes_to_write) {
+    i32 bytes_left = mem->capacity - mem->cursor;
+    if (bytes_left >= 1) {
+        bytes_to_write = MIN(bytes_to_write, (size_t)bytes_left);
+        memcpy(mem->data + mem->cursor, src, bytes_to_write);
+        mem->cursor += bytes_to_write;
+        mem->len = MAX(mem->cursor, (i64)mem->len);
+        return bytes_to_write;
+    }
+    return 0;
+}
+
+i64 mem_read(void* dest, mem_t* mem, size_t bytes_to_read) {
+    i64 bytes_left = mem->len - mem->cursor;
+    if (bytes_left >= 1) {
+        bytes_to_read = MIN(bytes_to_read, (size_t)bytes_left);
+        memcpy(dest, mem->data + mem->cursor, bytes_to_read);
+        mem->cursor += bytes_to_read;
+        return bytes_to_read;
+    }
+    return 0;
+}
+
+void mem_seek(mem_t* mem, i32 offset) {
+    if (offset >= 0 && (u32)offset < mem->len) {
+        mem->cursor = offset;
+    } else {
+        fatal_error();
+    };
+}
 
 u64 file_read_at_offset(void* dest, file_stream_t fp, u64 offset, u64 num_bytes) {
 	i64 prev_read_pos = file_stream_get_pos(fp);
@@ -90,7 +156,7 @@ bool is_directory(const char* path) {
 }
 
 
-void get_system_info(bool verbose) {
+system_info_t get_system_info(bool verbose) {
     system_info_t system_info = {0};
 #if WINDOWS
     SYSTEM_INFO win32_system_info;
@@ -106,6 +172,9 @@ void get_system_info(bool verbose) {
     system_info.os_page_size = (u32) getpagesize();
     system_info.page_alignment_mask = ~((u64)(sysconf(_SC_PAGE_SIZE) - 1));
     system_info.is_macos = true;
+    if (file_exists("../MacOS/Slidescape")) {
+        system_info.running_from_app_bundle = true;
+    }
 #elif LINUX
     system_info.logical_cpu_count = sysconf( _SC_NPROCESSORS_ONLN );
     system_info.physical_cpu_count = system_info.logical_cpu_count; // TODO(pvalkema): how to read this on Linux?
@@ -115,23 +184,32 @@ void get_system_info(bool verbose) {
     if (verbose) console_print("There are %d logical CPU cores\n", system_info.logical_cpu_count);
     system_info.suggested_total_thread_count = MIN(system_info.logical_cpu_count, MAX_THREAD_COUNT);
 
-    //TODO(pvalkema): think about returning this instead of setting global state.
-    global_system_info = system_info;
+	return system_info;
 }
 
 
-void init_thread_memory(i32 logical_thread_index, system_info_t* system_info) {
+void init_thread_memory(system_info_t* system_info) {
+	if (threadlocal_thread_memory != NULL) {
+		ASSERT(!"init_thread_memory() called twice on the same thread");
+		return;
+	}
 	// Allocate a private memory buffer
 	u64 thread_memory_size = MEGABYTES(16);
-	local_thread_memory = (thread_memory_t*) malloc(thread_memory_size); // how much actually needed?
-	thread_memory_t* thread_memory = local_thread_memory;
+    threadlocal_thread_memory = (thread_memory_t*) malloc(thread_memory_size); // how much actually needed?
+	thread_memory_t* thread_memory = threadlocal_thread_memory;
 	memset(thread_memory, 0, sizeof(thread_memory_t));
 #if !WINDOWS
 	// TODO(pvalkema): think about whether implement creation of async I/O events is needed here
 #endif
 	thread_memory->thread_memory_raw_size = thread_memory_size;
 
-    u32 os_page_size = system_info->os_page_size;
+	u32 os_page_size = 0;
+	if (!system_info || system_info->os_page_size == 0) {
+		init_global_system_info(false);
+		os_page_size = global_system_info.os_page_size;
+	} else {
+		os_page_size = system_info->os_page_size;
+	}
 	thread_memory->aligned_rest_of_thread_memory = (void*)
 			((((u64)thread_memory + sizeof(thread_memory_t) + os_page_size - 1) / os_page_size) * os_page_size); // round up to next page boundary
 	thread_memory->thread_memory_usable_size = thread_memory_size - ((u64)thread_memory->aligned_rest_of_thread_memory - (u64)thread_memory);
@@ -139,4 +217,9 @@ void init_thread_memory(i32 logical_thread_index, system_info_t* system_info) {
 
 }
 
-
+void destroy_thread_memory(void) {
+	if (threadlocal_thread_memory != NULL) {
+		free(threadlocal_thread_memory);
+        threadlocal_thread_memory = NULL;
+	}
+}

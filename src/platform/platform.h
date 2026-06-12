@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2024, Pieter Valkema
+  Copyright (c) 2019-2026, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -33,12 +33,13 @@
 #include "memrw.h"
 #include "timerutils.h"
 #include "work_queue.h"
-#include "benaphore.h"
+#include "platform_mutex.h"
 
 
 #if WINDOWS
 #include <windows.h>
 #else
+#include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
 #endif
@@ -61,6 +62,7 @@ typedef struct app_state_t app_state_t;
 typedef struct mem_t {
 	size_t len;
 	size_t capacity;
+    i64 cursor;
 	u8 data[0];
 } mem_t;
 
@@ -74,10 +76,6 @@ typedef int file_handle_t;
 typedef FILE* file_stream_t;
 #endif
 
-typedef struct platform_thread_info_t {
-	i32 logical_thread_index;
-	work_queue_t* queue;
-} platform_thread_info_t;
 
 #define MAX_ASYNC_IO_EVENTS 32
 
@@ -103,7 +101,17 @@ typedef struct system_info_t {
     i32 logical_cpu_count;
     i32 suggested_total_thread_count;
     bool is_macos;
+    bool running_from_app_bundle;
 } system_info_t;
+
+#if WINDOWS
+typedef INIT_ONCE platform_once_t;
+#define PLATFORM_ONCE_INIT INIT_ONCE_STATIC_INIT
+#else
+typedef pthread_once_t platform_once_t;
+#define PLATFORM_ONCE_INIT PTHREAD_ONCE_INIT
+#endif
+typedef void platform_once_callback_t(void);
 
 
 typedef struct directory_listing_t directory_listing_t;
@@ -134,6 +142,9 @@ static inline void platform_semaphore_wait(semaphore_handle_t semaphore) {
 u8* platform_alloc(size_t size);
 mem_t* platform_allocate_mem_buffer(size_t capacity);
 mem_t* platform_read_entire_file(const char* filename);
+i64 mem_write(void* src, mem_t* mem, size_t bytes_to_write);
+i64 mem_read(void* dest, mem_t* mem, size_t bytes_to_read);
+void mem_seek(mem_t* mem, i32 offset);
 u64 file_read_at_offset(void* dest, file_stream_t fp, u64 offset, u64 num_bytes);
 
 int platform_stat(const char* filename, struct stat* st);
@@ -153,9 +164,12 @@ size_t file_handle_read_at_offset(void* dest, file_handle_t file_handle, u64 off
 bool file_exists(const char* filename);
 bool is_directory(const char* path);
 
-void get_system_info(bool verbose);
+system_info_t get_system_info(bool verbose);
 
-void init_thread_memory(i32 logical_thread_index, system_info_t* system_info);
+void platform_call_once(platform_once_t* once, platform_once_callback_t* callback);
+void init_global_system_info(bool verbose);
+void init_thread_memory(system_info_t* system_info);
+void destroy_thread_memory(void);
 
 // globals
 #if defined(PLATFORM_IMPL)
@@ -166,15 +180,13 @@ void init_thread_memory(i32 logical_thread_index, system_info_t* system_info);
 #undef extern
 #endif
 
-extern THREAD_LOCAL thread_memory_t* local_thread_memory;
-static inline temp_memory_t begin_temp_memory_on_local_thread() { return begin_temp_memory(&local_thread_memory->temp_arena); }
+extern THREAD_LOCAL thread_memory_t* threadlocal_thread_memory;
+extern THREAD_LOCAL i32 threadlocal_logical_thread_index;
+static inline temp_memory_t begin_temp_memory_on_local_thread() { return begin_temp_memory(&threadlocal_thread_memory->temp_arena); }
 
 extern int g_argc;
 extern const char** g_argv;
 extern system_info_t global_system_info;
-extern i32 global_worker_thread_count;
-extern i32 global_active_worker_thread_count;
-extern work_queue_t global_completion_queue;
 
 extern bool is_verbose_mode INIT(= false);
 
@@ -185,4 +197,3 @@ extern bool is_verbose_mode INIT(= false);
 #ifdef __cplusplus
 }
 #endif
-

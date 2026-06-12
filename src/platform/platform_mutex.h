@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema
+  Copyright (c) 2019-2026, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -25,52 +25,41 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "benaphore.h"
 
-#include "intrinsics.h"
+#pragma once
 
-// Based on:
-// https://preshing.com/20120226/roll-your-own-lightweight-mutex/
-
-
-benaphore_t benaphore_create(void) {
-	benaphore_t result = {0};
-#ifdef _WIN32
-	result.semaphore = CreateSemaphore(NULL, 0, 1, NULL);
-#else
-	static i32 counter = 1;
-	char semaphore_name[64];
-	i32 c = atomic_increment(&counter);
-	snprintf(semaphore_name, sizeof(semaphore_name)-1, "/benaphore%d", c);
-	result.semaphore = sem_open(semaphore_name, O_CREAT, 0644, 0);
+#ifdef __cplusplus
+extern "C" {
 #endif
-	return result;
-}
 
-void benaphore_destroy(benaphore_t* benaphore) {
-#ifdef _WIN32
-	CloseHandle(benaphore->semaphore);
-#else
-	sem_close(benaphore->semaphore);
-#endif
-}
+#include "common.h"
 
-void benaphore_lock(benaphore_t* benaphore) {
-	if (atomic_increment(&benaphore->counter) > 1) {
 #ifdef _WIN32
-		WaitForSingleObject(benaphore->semaphore, INFINITE);
+#include "windows.h"
 #else
-		sem_wait(benaphore->semaphore);
+#include <pthread.h>
 #endif
-	}
-}
 
-void benaphore_unlock(benaphore_t* benaphore) {
-	if (atomic_decrement(&benaphore->counter) > 0) {
+
+typedef struct platform_mutex_t {
 #ifdef _WIN32
-		ReleaseSemaphore(benaphore->semaphore, 1, NULL);
+	SRWLOCK lock;
 #else
-		sem_post(benaphore->semaphore);
+	pthread_mutex_t lock;
 #endif
-	}
+} platform_mutex_t;
+
+#ifdef _WIN32
+#define PLATFORM_MUTEX_INITIALIZER { SRWLOCK_INIT }
+#else
+#define PLATFORM_MUTEX_INITIALIZER { PTHREAD_MUTEX_INITIALIZER }
+#endif
+
+void platform_mutex_init(platform_mutex_t* mutex);
+void platform_mutex_destroy(platform_mutex_t* mutex);
+void platform_mutex_lock(platform_mutex_t* mutex);
+void platform_mutex_unlock(platform_mutex_t* mutex);
+
+#ifdef __cplusplus
 }
+#endif

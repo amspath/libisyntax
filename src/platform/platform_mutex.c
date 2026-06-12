@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2023, Pieter Valkema
+  Copyright (c) 2019-2026, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -25,36 +25,39 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include "platform_mutex.h"
 
-#pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "common.h"
-
+void platform_mutex_init(platform_mutex_t* mutex) {
 #ifdef _WIN32
-#include "windows.h"
+	InitializeSRWLock(&mutex->lock);
 #else
-#include <semaphore.h>
+	if (pthread_mutex_init(&mutex->lock, NULL) != 0) {
+		fatal_error("platform_mutex_init(): failed to initialize pthread mutex");
+	}
 #endif
-
-
-typedef struct benaphore_t {
-#ifdef _WIN32
-	HANDLE semaphore;
-#else
-	sem_t* semaphore;
-#endif
-	volatile i32 counter;
-} benaphore_t;
-
-benaphore_t benaphore_create(void);
-void benaphore_destroy(benaphore_t* benaphore);
-void benaphore_lock(benaphore_t* benaphore);
-void benaphore_unlock(benaphore_t* benaphore);
-
-#ifdef __cplusplus
 }
+
+void platform_mutex_destroy(platform_mutex_t* mutex) {
+#ifdef _WIN32
+	(void)mutex;
+#else
+	pthread_mutex_destroy(&mutex->lock);
 #endif
+}
+
+void platform_mutex_lock(platform_mutex_t* mutex) {
+#ifdef _WIN32
+	AcquireSRWLockExclusive(&mutex->lock);
+#else
+	pthread_mutex_lock(&mutex->lock);
+#endif
+}
+
+void platform_mutex_unlock(platform_mutex_t* mutex) {
+#ifdef _WIN32
+	ReleaseSRWLockExclusive(&mutex->lock);
+#else
+	pthread_mutex_unlock(&mutex->lock);
+#endif
+}

@@ -72,6 +72,13 @@
 #define APPLE_ARM 0
 #endif
 
+#if defined(__linux__) || (!defined(__APPLE__) && (defined(__unix__) || defined(_POSIX_VERSION)))
+#define LINUX 1
+#define OPENGL_H <GL/glew.h>
+#else
+#define LINUX 0
+#endif
+
 #if LINUX
 #include <features.h>
 #endif
@@ -80,19 +87,6 @@
 #include <stdlib.h>
 //#define _aligned_malloc(size, alignment) aligned_alloc(alignment, size)
 //#define _aligned_free(ptr) free(ptr)
-#if __SIZEOF_POINTER__==8
-#define fseeko64 fseek
-#define fopen64 fopen
-#define fgetpos64 fgetpos
-#define fsetpos64 fsetpos
-#endif
-#endif
-
-#if defined(__linux__) || (!defined(__APPLE__) && (defined(__unix__) || defined(_POSIX_VERSION)))
-#define LINUX 1
-#define OPENGL_H <GL/glew.h>
-#else
-#define LINUX 0
 #endif
 
 // Compiler detection
@@ -107,6 +101,27 @@
 #else
 #define COMPILER_GCC 0
 #endif
+
+// Host byte order is assumed to be known at compile time. If a new compiler does
+// not expose byte-order macros, define HOST_BIG_ENDIAN in config.h.
+#ifndef HOST_BIG_ENDIAN
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#define HOST_BIG_ENDIAN 1
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#define HOST_BIG_ENDIAN 0
+#elif defined(_WIN32) || defined(__LITTLE_ENDIAN__) || defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__) || \
+      defined(__ARMEL__) || defined(__AARCH64EL__) || defined(__i386__) || defined(__x86_64__)
+#define HOST_BIG_ENDIAN 0
+#elif defined(__BIG_ENDIAN__) || defined(_MIPSEB) || defined(__MIPSEB) || defined(__MIPSEB__) || \
+      defined(__ARMEB__) || defined(__AARCH64EB__) || defined(__powerpc__) || defined(__ppc__) || defined(__PPC__)
+#define HOST_BIG_ENDIAN 1
+#else
+#error "Could not determine host byte order. Define HOST_BIG_ENDIAN in config.h."
+#endif
+#endif
+
+#define HOST_LITTLE_ENDIAN (!HOST_BIG_ENDIAN)
+#define DATA_ENDIAN_DIFFERS(data_is_big_endian) ((data_is_big_endian) != HOST_BIG_ENDIAN)
 
 // IDE detection (for dealing with pesky preprocessor highlighting issues)
 #if defined(__JETBRAINS_IDE__)
@@ -139,6 +154,13 @@
 #define alloca _alloca
 #define fseeko64 _fseeki64
 #define fopen64 fopen
+#endif
+
+#if APPLE
+#define fseeko64 fseeko
+#define fopen64 fopen
+#define fgetpos64 fgetpos
+#define fsetpos64 fsetpos
 #endif
 
 #ifndef THREAD_LOCAL
@@ -286,7 +308,7 @@ typedef struct str_t {
 
 #define SQUARE(x) ((x)*(x))
 
-#define memset_zero(x) memset((x), 0, sizeof(*x))
+#define memset_zero(x) memset((x), 0, sizeof(*(x)))
 
 #define KILOBYTES(n) (1024LL*(n))
 #define MEGABYTES(n) (1024LL*KILOBYTES(n))
@@ -300,7 +322,7 @@ typedef struct str_t {
 #define __FILENAME__ __FILE__
 #endif
 
-#define fatal_error(message) _fatal_error(__FILE__, __LINE__, __func__, "" message)
+#define fatal_error(message) _ssc_fatal_error(__FILE__, __LINE__, __func__, "" message)
 #if FATAL_ERROR_DONT_INLINE
 #define FATAL_ERROR_INLINE_SPECIFIER
 // Not inlining _fatal_error() shaves a few kilobytes off the executable size.
@@ -314,7 +336,7 @@ void _fatal_error(const char* source_filename, i32 line, const char* func, const
 #define FATAL_ERROR_INLINE_SPECIFIER FORCE_INLINE
 #endif //FATAL_ERROR_DONT_INLINE
 #ifdef FATAL_ERROR_IMPLEMENTATION
-FATAL_ERROR_INLINE_SPECIFIER void _fatal_error(const char* source_filename, i32 line, const char* func, const char* message) {
+FATAL_ERROR_INLINE_SPECIFIER void _ssc_fatal_error(const char* source_filename, i32 line, const char* func, const char* message) {
 	fprintf(stderr, "%s(): %s:%d\n", func, source_filename, line);
 	if (message[0] != '\0') fprintf(stderr, "Error: %s\n", message);
 	fprintf(stderr, "A fatal error occurred (aborting).\n");

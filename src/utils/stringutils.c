@@ -28,6 +28,8 @@
 #include "common.h"
 #include "stringutils.h"
 
+#include <ctype.h>
+
 void strip_character(char* s, char character_to_strip) {
 	if (!s) return;
 	char c;
@@ -37,6 +39,15 @@ void strip_character(char* s, char character_to_strip) {
 	}
 }
 
+char* trim_whitespace(char* s) {
+	if (!s) return NULL;
+	while (*s && isspace((unsigned char)*s)) ++s;
+	char* end = s + strlen(s);
+	while (end > s && isspace((unsigned char)end[-1])) --end;
+	*end = '\0';
+	return s;
+}
+
 char* find_next_token(const char* s, char separator) {
 	if (!s) return NULL;
 	char c;
@@ -44,6 +55,29 @@ char* find_next_token(const char* s, char separator) {
 		if (c == separator) return (char*)s;
 	}
 	return NULL;
+}
+
+// NOTE: this serves as an alternative to strncpy: copies up to dest_size-1 and always null-terminates
+size_t copy_cstring(char* dest, const char* src, size_t dest_size) {
+	size_t len = 0;
+
+	if (!src) {
+		if (dest_size > 0) dest[0] = '\0';
+		return 0;
+	}
+
+	if (dest_size > 0) {
+		for (; len + 1 < dest_size && src[len]; ++len) {
+			dest[len] = src[len];
+		}
+		dest[len] = '\0';
+	}
+
+	while (src[len]) {
+		++len;
+	}
+
+	return len; // source length; truncation if return >= dest_size
 }
 
 void dots_to_underscores(char* s, i32 max) {
@@ -90,13 +124,16 @@ void replace_file_extension(char* filename, i32 max_len, const char* new_ext) {
 	size_t original_len = strlen(filename);
 	char* end = filename + original_len;
 	char* append_pos = end; // where we will add the new extension
+	bool found_period = false;
 	// Strip the original extension
-	for (char* pos = end - 1; pos >= filename; --pos) {
+	for (char* pos = end; pos > filename;) {
+		--pos;
 		if (*pos == '/' || *pos == '\\') {
 			// gone too far, default to end of original filename
 			break;
 		}
 		if (*pos == '.') {
+			found_period = true;
 			if (new_ext_len == 0) {
 				*pos = '\0'; // done: only strip extension
 				return;
@@ -106,9 +143,16 @@ void replace_file_extension(char* filename, i32 max_len, const char* new_ext) {
 			}
 		}
 	}
+	char* buffer_end = filename + max_len;
+	if (!found_period) {
+		if (new_ext_len == 0) return;
+		// Add the missing period
+		if (append_pos < buffer_end) {
+			*append_pos++ = '.';
+		}
+	}
 	// Now append the new extension
 	const char* new_ext_pos = new_ext;
-	char* buffer_end = filename + max_len;
 	for (i32 append_len = (buffer_end - append_pos); append_len > 0; --append_len) {
 		*append_pos = *new_ext_pos;
 		if (*new_ext_pos == '\0') break;
@@ -129,7 +173,7 @@ char** split_into_lines(char* buffer, size_t* num_lines) {
 		if (c == '\n' || c == '\r') {
 			*pos = '\0';
 			newline = true;
-		} else if (newline || c == '\0') {
+		} else if (newline) {
 			size_t line_index = lines_counted++;
 			if (lines_counted > capacity) {
 				capacity = MAX(capacity, 8) * 2;
@@ -153,11 +197,43 @@ size_t count_lines(char* buffer) {
 		c = *pos;
 		if (c == '\n' || c == '\r') {
 			newline = true;
-		} else if (newline || c == '\0') {
+		} else if (newline) {
 			lines_counted++;
 			newline = false;
 		}
 		++pos;
 	} while (c != '\0');
 	return lines_counted;
+}
+
+bool hex_digit_to_value(char c, u8* out_value) {
+	if (c >= '0' && c <= '9') {
+		*out_value = (u8)(c - '0');
+		return true;
+	} else if (c >= 'a' && c <= 'f') {
+		*out_value = (u8)(c - 'a' + 10);
+		return true;
+	} else if (c >= 'A' && c <= 'F') {
+		*out_value = (u8)(c - 'A' + 10);
+		return true;
+	}
+	return false;
+}
+
+size_t uri_percent_decode(const char* src, char* dest, size_t dest_size) {
+	size_t out_len = 0;
+	if (dest_size == 0) return 0;
+	while (*src && out_len + 1 < dest_size) {
+		if (*src == '%' && src[1] && src[2]) {
+			u8 high = 0, low = 0;
+			if (hex_digit_to_value(src[1], &high) && hex_digit_to_value(src[2], &low)) {
+				dest[out_len++] = (char)((high << 4) | low);
+				src += 3;
+				continue;
+			}
+		}
+		dest[out_len++] = *src++;
+	}
+	dest[out_len] = 0;
+	return out_len;
 }

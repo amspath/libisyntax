@@ -1,7 +1,7 @@
 /*
   BSD 2-Clause License
 
-  Copyright (c) 2019-2025, Pieter Valkema
+  Copyright (c) 2019-2026, Pieter Valkema
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
@@ -62,134 +62,7 @@
     ASSERT(result == LIBISYNTAX_OK);               \
 } while(0);
 
-
-#ifndef LIBISYNTAX_NO_THREAD_POOL_IMPLEMENTATION
-
-static platform_thread_info_t thread_infos[MAX_THREAD_COUNT];
-
-
-
 // Routines for initializing the global thread pool
-
-#if WINDOWS
-#include "win32_utils.h"
-
-_Noreturn DWORD WINAPI thread_proc(void* parameter) {
-	platform_thread_info_t* thread_info = (platform_thread_info_t*) parameter;
-	i64 init_start_time = get_clock();
-
-	atomic_increment(&global_worker_thread_idle_count);
-
-	init_thread_memory(thread_info->logical_thread_index, &global_system_info);
-	thread_memory_t* thread_memory = local_thread_memory;
-
-	for (i32 i = 0; i < MAX_ASYNC_IO_EVENTS; ++i) {
-		thread_memory->async_io_events[i] = CreateEventA(NULL, TRUE, FALSE, NULL);
-		if (!thread_memory->async_io_events[i]) {
-			win32_diagnostic("CreateEvent");
-		}
-	}
-//	console_print("Thread %d reporting for duty (init took %.3f seconds)\n", thread_info->logical_thread_index, get_seconds_elapsed(init_start_time, get_clock()));
-
-	for (;;) {
-		if (thread_info->logical_thread_index > global_active_worker_thread_count) {
-			// Worker is disabled, do nothing
-			Sleep(100);
-			continue;
-		}
-		if (!work_queue_is_work_in_progress(thread_info->queue)) {
-			Sleep(1);
-			WaitForSingleObjectEx(thread_info->queue->semaphore, 1, FALSE);
-		}
-        work_queue_do_work(thread_info->queue, thread_info->logical_thread_index);
-	}
-}
-
-static void init_thread_pool() {
-	init_thread_memory(0, &global_system_info);
-
-    int total_thread_count = global_system_info.suggested_total_thread_count;
-	global_worker_thread_count = total_thread_count - 1;
-	global_active_worker_thread_count = global_worker_thread_count;
-
-	global_work_queue = work_queue_create("/worksem", 1024); // Queue for newly submitted tasks
-	global_completion_queue = work_queue_create("/completionsem", 1024); // Message queue for completed tasks
-
-	// NOTE: the main thread is considered thread 0.
-	for (i32 i = 1; i < total_thread_count; ++i) {
-		platform_thread_info_t thread_info = { .logical_thread_index = i, .queue = &global_work_queue};
-		thread_infos[i] = thread_info;
-
-		DWORD thread_id;
-		HANDLE thread_handle = CreateThread(NULL, 0, thread_proc, thread_infos + i, 0, &thread_id);
-		CloseHandle(thread_handle);
-
-	}
-
-
-}
-
-#else
-
-#include <pthread.h>
-
-static void* worker_thread(void* parameter) {
-    platform_thread_info_t* thread_info = (platform_thread_info_t*) parameter;
-
-//	fprintf(stderr, "Hello from thread %d\n", thread_info->logical_thread_index);
-
-    init_thread_memory(thread_info->logical_thread_index, &global_system_info);
-	atomic_increment(&global_worker_thread_idle_count);
-
-	for (;;) {
-		if (thread_info->logical_thread_index > global_active_worker_thread_count) {
-			// Worker is disabled, do nothing
-			platform_sleep(100);
-			continue;
-		}
-        if (!work_queue_is_work_waiting_to_start(thread_info->queue)) {
-            //platform_sleep(1);
-            sem_wait(thread_info->queue->semaphore);
-            if (thread_info->logical_thread_index > global_active_worker_thread_count) {
-                // Worker is disabled, do nothing
-                platform_sleep(100);
-                continue;
-            }
-        }
-        work_queue_do_work(thread_info->queue, thread_info->logical_thread_index);
-    }
-
-    return 0;
-}
-
-static void init_thread_pool() {
-	init_thread_memory(0, &global_system_info);
-    global_worker_thread_count = global_system_info.suggested_total_thread_count - 1;
-    global_active_worker_thread_count = global_worker_thread_count;
-
-	global_work_queue = work_queue_create("/worksem", 1024); // Queue for newly submitted tasks
-	global_completion_queue = work_queue_create("/completionsem", 1024); // Message queue for completed tasks
-
-    pthread_t threads[MAX_THREAD_COUNT] = {};
-
-    // NOTE: the main thread is considered thread 0.
-    for (i32 i = 1; i < global_system_info.suggested_total_thread_count; ++i) {
-        thread_infos[i] = (platform_thread_info_t){ .logical_thread_index = i, .queue = &global_work_queue};
-
-        if (pthread_create(threads + i, NULL, &worker_thread, (void*)(&thread_infos[i])) != 0) {
-            fprintf(stderr, "Error creating thread\n");
-        }
-
-    }
-
-    test_multithreading_work_queue();
-
-
-}
-
-#endif
-
-#endif //LIBISYNTAX_NO_THREAD_POOL_IMPLEMENTATION
 
 // TODO(avirodov): int may be too small for some counters later on.
 // TODO(avirodov): should make a flag to turn counters off, they may have overhead.
@@ -197,50 +70,31 @@ static void init_thread_pool() {
 // TODO(avirodov): debug api?
 #define DBGCTR_COUNT(_counter) atomic_increment(&_counter)
 i32 volatile dbgctr_init_thread_pool_counter = 0;
-i32 volatile dbgctr_init_global_mutexes_created = 0;
 
-static benaphore_t* libisyntax_get_global_mutex() {
-    static benaphore_t libisyntax_global_mutex;
-    static i32 volatile init_status = 0; // 0 - not initialized, 1 - being initialized, 2 - done initializing.
-
-    // Quick path for already initialized scenario.
-    read_barrier;
-    if (init_status == 2) {
-        return &libisyntax_global_mutex;
-    }
-
-    // We need to establish a global mutex, and this is nontrivial as mutex primitives available don't allow static
-    // initialization (more discussion in https://github.com/amspath/libisyntax/issues/16).
-    if (atomic_compare_exchange(&init_status, 1, 0)) {
-        // We get to do the initialization
-        libisyntax_global_mutex = benaphore_create();
-        DBGCTR_COUNT(dbgctr_init_global_mutexes_created);
-        init_status = 2;
-        write_barrier;
-    } else {
-        // Wait until the other thread finishes initialization. Since we don't have a mutex, spinlock is
-        // the best we can do here. It should be a very short critical section.
-        do { read_barrier; } while(init_status < 2);
-    }
-
-    return &libisyntax_global_mutex;
-}
+static platform_mutex_t libisyntax_global_mutex = PLATFORM_MUTEX_INITIALIZER;
 
 isyntax_error_t libisyntax_init() {
     // Lock-unlock to ensure that all parallel calls to libisyntax_init() wait for the actual initialization to complete.
-    benaphore_lock(libisyntax_get_global_mutex());
+    platform_mutex_lock(&libisyntax_global_mutex);
     static bool libisyntax_global_init_complete = false;
 
     if (libisyntax_global_init_complete == false) {
-#ifndef LIBISYNTAX_NO_THREAD_POOL_IMPLEMENTATION
         // Actual initialization.
-        get_system_info(false);
+#ifndef LIBISYNTAX_THREAD_POOL_SHARED_WITH_SLIDESCAPE
+        init_global_system_info(false);
         DBGCTR_COUNT(dbgctr_init_thread_pool_counter);
-        init_thread_pool();
+        init_thread_pool(&global_thread_pool,
+                         1024,
+                         false,
+                         false,
+                         NULL);
+
+#else
+        libisyntax_init_thread_pool_for_slidescape();
 #endif
         libisyntax_global_init_complete = true;
     }
-    benaphore_unlock(libisyntax_get_global_mutex());
+    platform_mutex_unlock(&libisyntax_global_mutex);
     return LIBISYNTAX_OK;
 }
 
@@ -428,7 +282,7 @@ isyntax_error_t libisyntax_cache_create(const char* debug_name_or_null, int32_t 
     memset(cache_ptr, 0, sizeof(*cache_ptr));
     tile_list_init(&cache_ptr->cache_list, debug_name_or_null);
     cache_ptr->target_cache_size = cache_size;
-    cache_ptr->mutex = benaphore_create();
+    platform_mutex_init(&cache_ptr->mutex);
 
     // Note: rest of initialization is deferred to the first injection, as that is where we will know the block size.
 
@@ -451,8 +305,8 @@ isyntax_error_t libisyntax_cache_inject(isyntax_cache_t* isyntax_cache, isyntax_
     size_t h_coeff_block_allocator_capacity_in_blocks = ll_coeff_block_allocator_capacity_in_blocks * 3;
     isyntax_cache->ll_coeff_block_allocator = malloc(sizeof(block_allocator_t));
     isyntax_cache->h_coeff_block_allocator = malloc(sizeof(block_allocator_t));
-    *isyntax_cache->ll_coeff_block_allocator = block_allocator_create(ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
-    *isyntax_cache->h_coeff_block_allocator = block_allocator_create(h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+    block_allocator_init(isyntax_cache->ll_coeff_block_allocator, ll_coeff_block_size, ll_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
+    block_allocator_init(isyntax_cache->h_coeff_block_allocator, h_coeff_block_size, h_coeff_block_allocator_capacity_in_blocks, MEGABYTES(256));
     isyntax_cache->is_block_allocator_owned = true;
 
     if (isyntax_cache->allocator_block_width != isyntax->block_width ||
@@ -471,13 +325,13 @@ void libisyntax_cache_flush(isyntax_cache_t* isyntax_cache, isyntax_t* isyntax_o
     // Flusing per-isyntax is not yet implemented.
     (void)isyntax_or_null;
 
-    benaphore_lock(&isyntax_cache->mutex);
+    platform_mutex_lock(&isyntax_cache->mutex);
 
     while (isyntax_cache->cache_list.tail) {
         tile_list_remove(&isyntax_cache->cache_list, isyntax_cache->cache_list.tail);
     }
 
-    benaphore_unlock(&isyntax_cache->mutex);
+    platform_mutex_unlock(&isyntax_cache->mutex);
 }
 
 void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
@@ -490,7 +344,7 @@ void libisyntax_cache_destroy(isyntax_cache_t* isyntax_cache) {
         }
     }
 
-    benaphore_destroy(&isyntax_cache->mutex);
+    platform_mutex_destroy(&isyntax_cache->mutex);
     free(isyntax_cache);
 }
 
