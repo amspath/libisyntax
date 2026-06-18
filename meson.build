@@ -52,11 +52,11 @@ isyntax_includes = include_directories(
 isyntax_source = [
   'src/isyntax/isyntax.c',
   'src/isyntax/isyntax_reader.c',
+  'src/platform/platform_mutex.c',
   'src/platform/platform.c',
   'src/platform/work_queue.c',
   'src/third_party/ltalloc.cc',
   'src/third_party/yxml.c',
-  'src/utils/benaphore.c',
   'src/utils/block_allocator.c',
   'src/utils/timerutils.c',
   'src/libisyntax.c',
