@@ -253,7 +253,7 @@ static void bgra_to_rgba(uint32_t *pixels, int width, int height) {
     int num_pixels = width * height;
     int num_pixels_aligned = (num_pixels / 4) * 4;
 
-#if defined(__ARM_NEON)
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
     for (int i = 0; i < num_pixels_aligned; i += 4) {
         uint32x4_t bgra = vld1q_u32(pixels + i);
         uint32x4_t b_mask = vdupq_n_u32(0x000000FF);
@@ -1576,7 +1576,7 @@ static void signed_magnitude_to_twos_complement_16_block(u16* data, u32 len) {
 		__m128i result = _mm_or_si128(maybe_positive, maybe_negative);
 		_mm_storeu_si128((__m128i*)(data + i), result);
 	}
-#elif defined(__ARM_NEON)
+#elif defined(__ARM_NEON__) || defined(__ARM_NEON)
     // NEON version for ARM processors
     for (; i < aligned_len; i += 8) {
         uint16x8_t x = vld1q_u16(data + i);
@@ -1612,7 +1612,7 @@ static void signed_magnitude_to_absolute_value_16_block(i16* data, u32 len) {
 		result = _mm_and_si128(result, _mm_set1_epi16(0x7FFF)); // x &= 0x7FFF (clear sign bit)
 		_mm_storeu_si128((__m128i*)(data + i), result);
 	}
-#elif defined(__ARM_NEON)
+#elif defined(__ARM_NEON__) || defined(__ARM_NEON)
     // NEON version for ARM processors
     for (; i < aligned_len; i += 8) {
         uint16x8_t x = vld1q_u16((u16*)data + i);
@@ -1715,7 +1715,7 @@ static void convert_ycocg_to_bgra_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg,
 			_mm_storeu_si128((__m128i*)(dest + i), lo);
 			_mm_storeu_si128((__m128i*)(dest + i + 4), hi);
 		}
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(__ARM_NEON)
         // Fast SIMD version for ARM NEON
         for (; i < aligned_width; i += 8) {
             int16x8_t Y_ = vld1q_s16(Y + i);
@@ -1785,7 +1785,7 @@ static void convert_ycocg_to_rgba_block(icoeff_t* Y, icoeff_t* Co, icoeff_t* Cg,
 			_mm_storeu_si128((__m128i*)(dest + i), lo);
 			_mm_storeu_si128((__m128i*)(dest + i + 4), hi);
 		}
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(__ARM_NEON)
         // Fast SIMD version for ARM NEON
         for (; i < aligned_width; i += 8) {
             int16x8_t Y_ = vld1q_s16(Y + i);
