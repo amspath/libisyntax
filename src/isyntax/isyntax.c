@@ -388,13 +388,13 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 					console_print_verbose("Unknown element (0x%04x, 0x%04x)\n", group, element);
 				} break;
 				case 0x002A: /*DICOM_ACQUISITION_DATETIME*/     { // "20210101103030.000000"
-					isyntax_copy_cstring(isyntax->dicom_acquisition_datetime, value, MIN(value_len, sizeof(isyntax->dicom_acquisition_datetime)));
+					isyntax_copy_cstring(isyntax->dicom_acquisition_datetime, value, MIN(value_len + 1, sizeof(isyntax->dicom_acquisition_datetime)));
 				} break;
 				case 0x0070: /*DICOM_MANUFACTURER*/             { // "PHILIPS"
-					isyntax_copy_cstring(isyntax->dicom_manufacturer, value, MIN(value_len, sizeof(isyntax->dicom_manufacturer)));
+					isyntax_copy_cstring(isyntax->dicom_manufacturer, value, MIN(value_len + 1, sizeof(isyntax->dicom_manufacturer)));
 				} break;
 				case 0x1090: /*DICOM_MANUFACTURERS_MODEL_NAME*/ { // "UFS Scanner"
-					isyntax_copy_cstring(isyntax->dicom_manufacturers_model_name, value, MIN(value_len, sizeof(isyntax->dicom_manufacturers_model_name)));
+					isyntax_copy_cstring(isyntax->dicom_manufacturers_model_name, value, MIN(value_len + 1, sizeof(isyntax->dicom_manufacturers_model_name)));
 				} break;
 			}
 		}; break;
@@ -404,7 +404,7 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 					console_print_verbose("Unknown element (0x%04x, 0x%04x)\n", group, element);
 				} break;
 				case 0x1000: /*DICOM_DEVICE_SERIAL_NUMBER*/     { // "FMT<4-digit number>"
-					isyntax_copy_cstring(isyntax->dicom_device_serial_number, value, MIN(value_len, sizeof(isyntax->dicom_device_serial_number)));
+					isyntax_copy_cstring(isyntax->dicom_device_serial_number, value, MIN(value_len + 1, sizeof(isyntax->dicom_device_serial_number)));
 				} break;
 				case 0x1020: /*DICOM_SOFTWARE_VERSIONS*/        {  // "<versionnumber>" "<versionnumber>"
 					if (value_len < 2) {
@@ -434,7 +434,7 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 						// Check if either '" "' or '"' at end of string
 						if (value[i] == '"' && ((i + 2 < value_len && value[i + 1] == ' ' && value[i + 2] == '"') || i + 1 == value_len)) {
 							size_t version_len = value + i - version_start;
-							isyntax_copy_cstring(isyntax->dicom_software_versions[version_index], version_start, MIN(version_len, sizeof(isyntax->dicom_software_versions[version_index])));
+							isyntax_copy_cstring(isyntax->dicom_software_versions[version_index], version_start, MIN(version_len + 1, sizeof(isyntax->dicom_software_versions[version_index])));
 							version_index++;
 							version_start = value + i + 3;
 						}
@@ -455,7 +455,7 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 						break;
 					};
 					for (i32 i = 0; i < number_of_values; ++i) {
-						isyntax_copy_cstring(isyntax->dicom_date_of_last_calibration[i], value + 1 + i * 11, MIN(8, sizeof(isyntax->dicom_date_of_last_calibration[i])));
+						isyntax_copy_cstring(isyntax->dicom_date_of_last_calibration[i], value + 1 + i * 11, sizeof(isyntax->dicom_date_of_last_calibration[i]));
 					}
 					isyntax->dicom_date_of_last_calibration_count = number_of_values;
 
@@ -474,7 +474,7 @@ static void isyntax_parse_ufsimport_child_node(isyntax_t* isyntax, u32 group, u3
 						break;
 					};
 					for (i32 i = 0; i < number_of_values; ++i) {
-						isyntax_copy_cstring(isyntax->dicom_time_of_last_calibration[i], value + 1 + i * 9, MIN(6, sizeof(isyntax->dicom_time_of_last_calibration[i])));
+						isyntax_copy_cstring(isyntax->dicom_time_of_last_calibration[i], value + 1 + i * 9, sizeof(isyntax->dicom_time_of_last_calibration[i]));
 					}
 					isyntax->dicom_time_of_last_calibration_count = number_of_values;
 
@@ -544,7 +544,7 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 					console_print_verbose("Unknown element (0x%04x, 0x%04x)\n", group, element);
 				} break;
 				case 0x2111: /*DICOM_DERIVATION_DESCRIPTION*/   {         // "PHILIPS UFS V%s | Quality=%d | DWT=%d | Compressor=%d"
-					isyntax_copy_cstring(isyntax->dicom_derivation_description, value, MIN(value_len, sizeof(isyntax->dicom_derivation_description)));
+					isyntax_copy_cstring(isyntax->dicom_derivation_description, value, MIN(value_len + 1, sizeof(isyntax->dicom_derivation_description)));
 				} break;
 			}
 		}; break;
@@ -585,7 +585,7 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 					if (end > start && value[end - 1] == '"') {
 						end--;
 					}
-					size_t copy_len = MIN(end - start, sizeof(isyntax->dicom_lossy_image_compression_method) - 1);
+					size_t copy_len = MIN(end - start + 1, sizeof(isyntax->dicom_lossy_image_compression_method));
 					isyntax_copy_cstring(isyntax->dicom_lossy_image_compression_method, value + start, copy_len);
 				} break;
 			}
@@ -641,7 +641,7 @@ static bool isyntax_parse_scannedimage_child_node(isyntax_t* isyntax, u32 group,
 				case 0x2004: /*UFS_IMAGE_DIMENSION_NAME*/                   {} break;
 				case 0x2005: /*UFS_IMAGE_DIMENSION_TYPE*/                   {} break;
 				case 0x2006: /*UFS_IMAGE_DIMENSION_UNIT*/                   {
-					isyntax_copy_cstring(isyntax->image_dimension_unit, value, MIN(value_len, sizeof(isyntax->image_dimension_unit)));
+					isyntax_copy_cstring(isyntax->image_dimension_unit, value, MIN(value_len + 1, sizeof(isyntax->image_dimension_unit)));
 				} break;
 				case 0x2007: /*UFS_IMAGE_DIMENSION_SCALE_FACTOR*/           {
 					if (isyntax->parser.current_image_type == ISYNTAX_IMAGE_TYPE_WSI) {
